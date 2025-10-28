@@ -35,7 +35,7 @@ def mock_requests_response(sample_html):
 @pytest.fixture
 def mock_get_request(mock_requests_response):
     """Mock successful GET request."""
-    with patch('grokipedia_client.client.requests.get') as mock_get:
+    with patch("grokipedia_client.client.requests.get") as mock_get:
         mock_get.return_value = mock_requests_response
         yield mock_get
 
@@ -51,6 +51,6 @@ def mock_error_response():
 @pytest.fixture
 def mock_get_request_error(mock_error_response):
     """Mock GET request that raises an error."""
-    with patch('grokipedia_client.client.requests.get') as mock_get:
+    with patch("grokipedia_client.client.requests.get") as mock_get:
         mock_get.return_value = mock_error_response
         yield mock_get

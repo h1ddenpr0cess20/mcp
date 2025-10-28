@@ -3,8 +3,17 @@ import pytest
 from unittest.mock import Mock, patch
 
 from lastfm_client import (
-    LastfmClient, LastfmAPIBase, AlbumAPI, ArtistAPI, AuthAPI, ChartAPI,
-    GeoAPI, LibraryAPI, TagAPI, TrackAPI, UserAPI
+    LastfmClient,
+    LastfmAPIBase,
+    AlbumAPI,
+    ArtistAPI,
+    AuthAPI,
+    ChartAPI,
+    GeoAPI,
+    LibraryAPI,
+    TagAPI,
+    TrackAPI,
+    UserAPI,
 )
 
 
@@ -36,18 +45,18 @@ def mock_response_data():
             "url": "https://www.last.fm/music/Test+Artist",
             "image": [
                 {"#text": "https://example.com/image1.jpg", "size": "small"},
-                {"#text": "https://example.com/image2.jpg", "size": "medium"}
+                {"#text": "https://example.com/image2.jpg", "size": "medium"},
             ],
-            "stats": {
-                "listeners": "1000000",
-                "playcount": "50000000"
-            },
+            "stats": {"listeners": "1000000", "playcount": "50000000"},
             "tags": {
                 "tag": [
                     {"name": "rock", "url": "https://www.last.fm/tag/rock"},
-                    {"name": "alternative", "url": "https://www.last.fm/tag/alternative"}
+                    {
+                        "name": "alternative",
+                        "url": "https://www.last.fm/tag/alternative",
+                    },
                 ]
-            }
+            },
         }
     }
 
@@ -81,7 +90,7 @@ def authenticated_client(sample_api_key, sample_api_secret, sample_session_key):
     return LastfmAPIBase(
         api_key=sample_api_key,
         api_secret=sample_api_secret,
-        session_key=sample_session_key
+        session_key=sample_session_key,
     )
 
 
@@ -103,7 +112,7 @@ def track_api_authenticated(sample_api_key, sample_api_secret, sample_session_ke
     return TrackAPI(
         api_key=sample_api_key,
         api_secret=sample_api_secret,
-        session_key=sample_session_key
+        session_key=sample_session_key,
     )
 
 
@@ -151,7 +160,7 @@ def clean_environment():
     original_env = dict(os.environ)
 
     # Clear Last.fm related environment variables
-    lastfm_vars = [k for k in os.environ.keys() if k.startswith('LASTFM_')]
+    lastfm_vars = [k for k in os.environ.keys() if k.startswith("LASTFM_")]
     for var in lastfm_vars:
         del os.environ[var]
 
@@ -166,7 +175,7 @@ def clean_environment():
 @pytest.fixture
 def mock_get_request(mock_success_response):
     """Mock GET request that returns success response."""
-    with patch('lastfm_client.base.requests.get') as mock_get:
+    with patch("lastfm_client.base.requests.get") as mock_get:
         mock_get.return_value = mock_success_response
         yield mock_get
 
@@ -174,7 +183,7 @@ def mock_get_request(mock_success_response):
 @pytest.fixture
 def mock_post_request(mock_success_response):
     """Mock POST request that returns success response."""
-    with patch('lastfm_client.base.requests.post') as mock_post:
+    with patch("lastfm_client.base.requests.post") as mock_post:
         mock_post.return_value = mock_success_response
         yield mock_post
 
@@ -182,7 +191,7 @@ def mock_post_request(mock_success_response):
 @pytest.fixture
 def mock_get_request_error(mock_error_response):
     """Mock GET request that raises an error."""
-    with patch('lastfm_client.base.requests.get') as mock_get:
+    with patch("lastfm_client.base.requests.get") as mock_get:
         mock_get.return_value = mock_error_response
         yield mock_get
 
@@ -190,6 +199,6 @@ def mock_get_request_error(mock_error_response):
 @pytest.fixture
 def mock_post_request_error(mock_error_response):
     """Mock POST request that raises an error."""
-    with patch('lastfm_client.base.requests.post') as mock_post:
+    with patch("lastfm_client.base.requests.post") as mock_post:
         mock_post.return_value = mock_error_response
         yield mock_post

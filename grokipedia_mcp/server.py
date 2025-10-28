@@ -6,8 +6,11 @@ mcp = FastMCP("grokipedia")
 
 _scraper = GrokipediaScraper()
 
+
 @mcp.tool
-def scrape_grokipedia(page_title: str) -> dict:
+def scrape_grokipedia(
+    page_title: str
+) -> dict:
     """
     Scrape a Grokipedia page and return structured JSON.
 
@@ -18,6 +21,7 @@ def scrape_grokipedia(page_title: str) -> dict:
         dict with keys: page_title, url, content (list of sections).
     """
     return _scraper.scrape_page(page_title)
+
 
 if __name__ == "__main__":
     # Default transport is STDIO; great for local dev / MCP clients.

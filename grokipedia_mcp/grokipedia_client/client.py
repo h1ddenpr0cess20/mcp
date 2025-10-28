@@ -8,7 +8,10 @@ class GrokipediaScraper:
     Scraper for Grokipedia pages using BeautifulSoup.
     """
 
-    def scrape_sections(self, page_title: str) -> List[Dict[str, Any]]:
+    def scrape_sections(
+        self,
+        page_title: str
+    ) -> List[Dict[str, Any]]:
         """
         Scrape Grokipedia and return a list of sections:
         [
@@ -33,7 +36,10 @@ class GrokipediaScraper:
         allowed = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "ul", "ol", "li"]
         elements = list(content_root.find_all(allowed, recursive=True))
 
-        def start_section(heading_text: Optional[str] = None, level: Optional[int] = None):
+        def start_section(
+            heading_text: Optional[str] = None, 
+            level: Optional[int] = None
+        ):
             return {"heading": heading_text, "level": level, "blocks": []}
 
         def push_block(section: Dict[str, Any], text: str):
@@ -70,7 +76,10 @@ class GrokipediaScraper:
 
         return [s for s in sections if s["heading"] is not None or s["blocks"]]
 
-    def scrape_page(self, page_title: str) -> Dict[str, Any]:
+    def scrape_page(
+        self,
+        page_title: str
+    ) -> Dict[str, Any]:
         """
         Scrape a Grokipedia page and return structured JSON data.
 
@@ -83,14 +92,10 @@ class GrokipediaScraper:
         url = f"https://grokipedia.com/page/{page_title.replace(' ', '_')}"
         try:
             sections = self.scrape_sections(page_title)
-            return {
-                "page_title": page_title,
-                "url": url,
-                "content": sections
-            }
+            return {"page_title": page_title, "url": url, "content": sections}
         except requests.RequestException as e:
             return {
                 "page_title": page_title,
                 "url": url,
-                "error": f"Failed to fetch page: {e}"
+                "error": f"Failed to fetch page: {e}",
             }

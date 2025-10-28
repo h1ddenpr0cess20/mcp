@@ -3,21 +3,63 @@ from .base import LastfmAPIBase
 
 
 class ArtistAPI(LastfmAPIBase):
-    def add_tags(self, artist: str, tags: str, sk: Optional[str] = None):
+    """API client for artist-related Last.fm operations."""
+
+    def add_tags(
+        self,
+        artist: str,
+        tags: str,
+        sk: Optional[str] = None
+    ):
+        """Tag an artist.
+
+        Args:
+            artist: The artist name.
+            tags: Comma-separated list of tags.
+            sk: Session key for authentication (optional, uses default if not provided).
+
+        Returns:
+            Dict containing the API response.
+        """
         p = {"artist": artist, "tags": tags}
         if sk:
             p["sk"] = sk
         return self._request("artist.addtags", p, "POST")
 
-    def get_correction(self, artist: str):
+    def get_correction(
+        self,
+        artist: str
+    ):
+        """Get canonical correction for artist name.
+
+        Args:
+            artist: The artist name to correct.
+
+        Returns:
+            Dict containing corrected artist information.
+        """
         return self._request("artist.getcorrection", {"artist": artist})
 
-    def get_info(self,
-                 artist: Optional[str] = None,
-                 mbid: Optional[str] = None,
-                 lang: Optional[str] = None,
-                 autocorrect: Optional[int] = None,
-                 username: Optional[str] = None):
+    def get_info(
+        self,
+        artist: Optional[str] = None,
+        mbid: Optional[str] = None,
+        lang: Optional[str] = None,
+        autocorrect: Optional[int] = None,
+        username: Optional[str] = None,
+    ):
+        """Get artist info.
+
+        Args:
+            artist: The artist name.
+            mbid: MusicBrainz ID.
+            lang: Language for descriptions (ISO 639-1 alpha-2).
+            autocorrect: Whether to autocorrect misspelled artist names (0 or 1).
+            username: Username for additional user-specific info.
+
+        Returns:
+            Dict containing artist information.
+        """
         p = {}
         if artist:
             p["artist"] = artist
@@ -31,11 +73,24 @@ class ArtistAPI(LastfmAPIBase):
             p["username"] = username
         return self._request("artist.getinfo", p)
 
-    def get_similar(self,
-                    artist: Optional[str] = None,
-                    mbid: Optional[str] = None,
-                    autocorrect: Optional[int] = None,
-                    limit: Optional[int] = None):
+    def get_similar(
+        self,
+        artist: Optional[str] = None,
+        mbid: Optional[str] = None,
+        autocorrect: Optional[int] = None,
+        limit: Optional[int] = None,
+    ):
+        """Get similar artists.
+
+        Args:
+            artist: The artist name.
+            mbid: MusicBrainz ID.
+            autocorrect: Whether to autocorrect misspelled artist names (0 or 1).
+            limit: Maximum number of similar artists to return.
+
+        Returns:
+            Dict containing similar artists.
+        """
         p = {}
         if artist:
             p["artist"] = artist
@@ -47,11 +102,24 @@ class ArtistAPI(LastfmAPIBase):
             p["limit"] = limit
         return self._request("artist.getsimilar", p)
 
-    def get_tags(self,
-                 artist: Optional[str] = None,
-                 mbid: Optional[str] = None,
-                 user: Optional[str] = None,
-                 autocorrect: Optional[int] = None):
+    def get_tags(
+        self,
+        artist: Optional[str] = None,
+        mbid: Optional[str] = None,
+        user: Optional[str] = None,
+        autocorrect: Optional[int] = None,
+    ):
+        """Get a user's tags for an artist.
+
+        Args:
+            artist: The artist name.
+            mbid: MusicBrainz ID.
+            user: The username to get tags for.
+            autocorrect: Whether to autocorrect misspelled artist names (0 or 1).
+
+        Returns:
+            Dict containing user tags for the artist.
+        """
         p = {}
         if artist:
             p["artist"] = artist
@@ -63,12 +131,26 @@ class ArtistAPI(LastfmAPIBase):
             p["autocorrect"] = autocorrect
         return self._request("artist.gettags", p)
 
-    def get_top_albums(self,
-                       artist: Optional[str] = None,
-                       mbid: Optional[str] = None,
-                       autocorrect: Optional[int] = None,
-                       page: Optional[int] = None,
-                       limit: Optional[int] = None):
+    def get_top_albums(
+        self,
+        artist: Optional[str] = None,
+        mbid: Optional[str] = None,
+        autocorrect: Optional[int] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+    ):
+        """Top albums by artist.
+
+        Args:
+            artist: The artist name.
+            mbid: MusicBrainz ID.
+            autocorrect: Whether to autocorrect misspelled artist names (0 or 1).
+            page: Page number for pagination.
+            limit: Number of results per page.
+
+        Returns:
+            Dict containing top albums.
+        """
         p = {}
         if artist:
             p["artist"] = artist
@@ -82,10 +164,22 @@ class ArtistAPI(LastfmAPIBase):
             p["limit"] = limit
         return self._request("artist.gettopalbums", p)
 
-    def get_top_tags(self,
-                     artist: Optional[str] = None,
-                     mbid: Optional[str] = None,
-                     autocorrect: Optional[int] = None):
+    def get_top_tags(
+        self,
+        artist: Optional[str] = None,
+        mbid: Optional[str] = None,
+        autocorrect: Optional[int] = None,
+    ):
+        """Top tags for artist.
+
+        Args:
+            artist: The artist name.
+            mbid: MusicBrainz ID.
+            autocorrect: Whether to autocorrect misspelled artist names (0 or 1).
+
+        Returns:
+            Dict containing top tags.
+        """
         p = {}
         if artist:
             p["artist"] = artist
@@ -95,12 +189,26 @@ class ArtistAPI(LastfmAPIBase):
             p["autocorrect"] = autocorrect
         return self._request("artist.gettoptags", p)
 
-    def get_top_tracks(self,
-                       artist: Optional[str] = None,
-                       mbid: Optional[str] = None,
-                       autocorrect: Optional[int] = None,
-                       page: Optional[int] = None,
-                       limit: Optional[int] = None):
+    def get_top_tracks(
+        self,
+        artist: Optional[str] = None,
+        mbid: Optional[str] = None,
+        autocorrect: Optional[int] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+    ):
+        """Top tracks by artist.
+
+        Args:
+            artist: The artist name.
+            mbid: MusicBrainz ID.
+            autocorrect: Whether to autocorrect misspelled artist names (0 or 1).
+            page: Page number for pagination.
+            limit: Number of results per page.
+
+        Returns:
+            Dict containing top tracks.
+        """
         p = {}
         if artist:
             p["artist"] = artist
@@ -114,13 +222,43 @@ class ArtistAPI(LastfmAPIBase):
             p["limit"] = limit
         return self._request("artist.gettoptracks", p)
 
-    def remove_tag(self, artist: str, tag: str, sk: Optional[str] = None):
+    def remove_tag(
+        self,
+        artist: str,
+        tag: str,
+        sk: Optional[str] = None
+    ):
+        """Remove tag from artist.
+
+        Args:
+            artist: The artist name.
+            tag: The tag to remove.
+            sk: Session key for authentication (optional, uses default if not provided).
+
+        Returns:
+            Dict containing the API response.
+        """
         p = {"artist": artist, "tag": tag}
         if sk:
             p["sk"] = sk
         return self._request("artist.removetag", p, "POST")
 
-    def search(self, artist: str, limit: Optional[int] = None, page: Optional[int] = None):
+    def search(
+        self,
+        artist: str,
+        limit: Optional[int] = None,
+        page: Optional[int] = None
+    ):
+        """Search for artists.
+
+        Args:
+            artist: The artist name to search for.
+            limit: Number of results to return.
+            page: Page number for pagination.
+
+        Returns:
+            Dict containing search results.
+        """
         p = {"artist": artist}
         if limit is not None:
             p["limit"] = limit

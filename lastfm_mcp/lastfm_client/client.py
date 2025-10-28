@@ -10,7 +10,25 @@ from .user import UserAPI
 
 
 class LastfmClient:
-    def __init__(self, api_key: str = None, api_secret: str = None, session_key: str = None):
+    """Main client for accessing Last.fm API endpoints.
+
+    This class provides access to various Last.fm APIs through specialized
+    sub-clients for albums, artists, authentication, charts, etc.
+    """
+
+    def __init__(
+        self,
+        api_key: str = None,
+        api_secret: str = None,
+        session_key: str = None
+    ):
+        """Initialize the Last.fm client.
+
+        Args:
+            api_key: Last.fm API key for authentication.
+            api_secret: Last.fm API secret for authentication.
+            session_key: User session key for authenticated requests.
+        """
         self.album = AlbumAPI(api_key, api_secret, session_key)
         self.artist = ArtistAPI(api_key, api_secret, session_key)
         self.auth = AuthAPI(api_key, api_secret, session_key)
@@ -32,5 +50,5 @@ __all__ = [
     "LibraryAPI",
     "TagAPI",
     "TrackAPI",
-    "UserAPI"
+    "UserAPI",
 ]
