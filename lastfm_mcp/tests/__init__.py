@@ -1,1 +1,1 @@
-# Tests for lastfm_client
+"""Tests package for lastfm_mcp."""

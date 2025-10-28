@@ -9,7 +9,7 @@ class TestGrokipediaScraper:
 
     def test_scrape_sections_success(self, sample_html):
         """Test successful scraping of sections from HTML."""
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.text = sample_html
             mock_response.raise_for_status.return_value = None
@@ -39,7 +39,7 @@ class TestGrokipediaScraper:
 
     def test_scrape_sections_no_content(self):
         """Test scraping with no content found."""
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.text = "<html><body>No content here</body></html>"
             mock_response.raise_for_status.return_value = None
@@ -52,7 +52,7 @@ class TestGrokipediaScraper:
 
     def test_scrape_sections_http_error(self):
         """Test error handling for HTTP failures."""
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_get.side_effect = Exception("HTTP 404: Not Found")
 
             scraper = GrokipediaScraper()
@@ -62,7 +62,7 @@ class TestGrokipediaScraper:
 
     def test_scrape_page_success(self, sample_html):
         """Test successful page scraping with structured return."""
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.text = sample_html
             mock_response.raise_for_status.return_value = None
@@ -79,7 +79,7 @@ class TestGrokipediaScraper:
 
     def test_scrape_page_http_error(self):
         """Test scrape_page error handling."""
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_get.side_effect = Exception("Network error")
 
             scraper = GrokipediaScraper()
@@ -96,7 +96,7 @@ class TestGrokipediaScraper:
         scraper = GrokipediaScraper()
 
         # Test spaces converted to underscores
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_get.side_effect = Exception("Expected error")
             try:
                 scraper.scrape_sections("Test Page")
@@ -123,7 +123,7 @@ class TestGrokipediaScraper:
         </html>
         """
 
-        with patch('grokipedia_client.client.requests.get') as mock_get:
+        with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.text = test_html
             mock_response.raise_for_status.return_value = None
