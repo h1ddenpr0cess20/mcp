@@ -2,8 +2,8 @@ import os
 import pytest
 from unittest.mock import Mock, patch
 
-from lastfm_client.client import (
-    LastfmAPIBase, AlbumAPI, ArtistAPI, AuthAPI, ChartAPI,
+from lastfm_client import (
+    LastfmClient, LastfmAPIBase, AlbumAPI, ArtistAPI, AuthAPI, ChartAPI,
     GeoAPI, LibraryAPI, TagAPI, TrackAPI, UserAPI
 )
 
@@ -166,7 +166,7 @@ def clean_environment():
 @pytest.fixture
 def mock_get_request(mock_success_response):
     """Mock GET request that returns success response."""
-    with patch('lastfm_client.client.requests.get') as mock_get:
+    with patch('lastfm_client.base.requests.get') as mock_get:
         mock_get.return_value = mock_success_response
         yield mock_get
 
@@ -174,7 +174,7 @@ def mock_get_request(mock_success_response):
 @pytest.fixture
 def mock_post_request(mock_success_response):
     """Mock POST request that returns success response."""
-    with patch('lastfm_client.client.requests.post') as mock_post:
+    with patch('lastfm_client.base.requests.post') as mock_post:
         mock_post.return_value = mock_success_response
         yield mock_post
 
@@ -182,7 +182,7 @@ def mock_post_request(mock_success_response):
 @pytest.fixture
 def mock_get_request_error(mock_error_response):
     """Mock GET request that raises an error."""
-    with patch('lastfm_client.client.requests.get') as mock_get:
+    with patch('lastfm_client.base.requests.get') as mock_get:
         mock_get.return_value = mock_error_response
         yield mock_get
 
@@ -190,6 +190,6 @@ def mock_get_request_error(mock_error_response):
 @pytest.fixture
 def mock_post_request_error(mock_error_response):
     """Mock POST request that raises an error."""
-    with patch('lastfm_client.client.requests.post') as mock_post:
+    with patch('lastfm_client.base.requests.post') as mock_post:
         mock_post.return_value = mock_error_response
         yield mock_post

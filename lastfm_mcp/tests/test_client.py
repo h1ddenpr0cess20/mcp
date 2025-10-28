@@ -3,8 +3,8 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import hashlib
 
-from lastfm_client.client import (
-    LastfmAPIBase, AlbumAPI, ArtistAPI, AuthAPI, ChartAPI,
+from lastfm_client import (
+    LastfmClient, LastfmAPIBase, AlbumAPI, ArtistAPI, AuthAPI, ChartAPI,
     GeoAPI, LibraryAPI, TagAPI, TrackAPI, UserAPI
 )
 
@@ -62,7 +62,7 @@ class TestLastfmAPIBase:
         actual_sig = client._signature(params)
         assert actual_sig == expected_sig
 
-    @patch('lastfm_client.client.requests.get')
+    @patch('lastfm_client.base.requests.get')
     def test_get_request_success(self, mock_get):
         """Test successful GET request."""
         mock_response = Mock()
@@ -80,7 +80,7 @@ class TestLastfmAPIBase:
         assert call_args[1]["params"]["api_key"] == "test_key"
         assert call_args[1]["params"]["format"] == "json"
 
-    @patch('lastfm_client.client.requests.post')
+    @patch('lastfm_client.base.requests.post')
     def test_post_request_with_session_key(self, mock_post):
         """Test successful POST request with session key."""
         mock_response = Mock()
