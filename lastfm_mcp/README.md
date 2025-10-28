@@ -19,22 +19,7 @@ Try the interactive demo to explore Last.fm API functionality:
 # Install dependencies
 pip install -e .
 
-# Run the demo
-python demo_lastfm.py
-
-# Or use the command line shortcut
-lastfm-demo
 ```
-
-The demo showcases:
-- Artist information and similar artists
-- Track details and similar tracks
-- Album information and track listings
-- User profiles and listening history
-- Global charts and popularity metrics
-- Search functionality across artists, albums, and tracks
-
-See `demo_README.md` for detailed usage instructions.
 
 ## Configuration
 
@@ -61,9 +46,18 @@ cp .env.example .env
 - **API Secret**: Required for authenticated operations (scrobbling, loving tracks)
 - **Session Key**: Obtained through authentication flow (for user-specific operations)
 
+## Code Structure
+
+The codebase is organized for maintainability:
+
+- `lastfm_client/base.py`: Base API class with shared functionality
+- `lastfm_client/client.py`: Unified client aggregating all APIs
+- `lastfm_client/[album|artist|auth|chart|geo|library|tag|track|user].py`: Individual API implementations per Last.fm service type
+- `server.py`: FastMCP server with tool registrations
+
 ## Notes
 
 - Read endpoints use GET; write endpoints (e.g., addTags, love, scrobble) use signed POST with `api_sig`.
 - Each tool accepts parameters that mirror the Last.fm docs.
-- See `lastfm_client/client.py` for the API classes grouped by type.
+- See `lastfm_client/` for the modular API implementations.
 - See `server.py` for FastMCP tool registrations.
