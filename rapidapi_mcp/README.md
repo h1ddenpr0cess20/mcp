@@ -21,7 +21,7 @@ Use `--host`/`--port` when starting an individual server if you need different b
 
 ## Configuration
 
-You need a **RapidAPI key** (`RAPIDAPI_KEY`) with access to the underlying APIs.
+You need a **RapidAPI key** (`RAPIDAPI_KEY`) with access to the underlying APIs.  See `docs/domain_providers.md` for links to the providers you must enable on your RapidAPI account.
 
 ### Environment Variables
 ```bash
