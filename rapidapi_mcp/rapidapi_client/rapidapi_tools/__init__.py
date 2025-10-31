@@ -19,14 +19,17 @@ from .finance import get_twelve_data_price, get_twelve_data_quote
 from .food import search_recipes
 from .jobs import get_job_details, search_jobs
 from .realestate import get_property_details, search_rental_properties
-from .search import (
-    get_business_details,
-    get_business_reviews,
+from .news import (
     get_full_story_coverage,
     get_headlines,
     get_local_headlines,
-    local_business_search,
     search_news,
+)
+from .search import (
+    get_business_details,
+    get_business_reviews,
+    local_business_search,
+    search_web,
 )
 from .social import (
     get_trending_topics,
@@ -72,4 +75,5 @@ __all__ = [
     "local_business_search",
     "get_business_details",
     "get_business_reviews",
+    "search_web",
 ]

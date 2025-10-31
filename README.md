@@ -23,6 +23,11 @@ FastMCP server for scraping and structuring content from Grokipedia pages.
 - Web scraping using BeautifulSoup
 - Clean separation between scraping logic and MCP server
 
+### RapidAPI MCP (`rapidapi_mcp/`)
+Suite of FastMCP servers wrapping the RapidAPI integrations used in the Tyumi project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
+
+**Requirements**: RapidAPI key (`RAPIDAPI_KEY` environment variable or `.env`)
+
 ## Common Setup
 Each server follows a similar structure:
 ```

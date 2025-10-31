@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-if __package__ in (None, ""):
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-from servers.base import build_server
-from rapidapi_tools import get_job_details, search_jobs
+from .base import build_server
+from ..rapidapi_tools import get_job_details, search_jobs
 
 INSTRUCTIONS = (
     "This server wraps the RapidAPI job search integrations from the Tyumi application. "

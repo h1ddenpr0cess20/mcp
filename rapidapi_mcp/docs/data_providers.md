@@ -11,7 +11,8 @@ the requests will fail with authentication errors.
 | Steam2 | Entertainment | Steam catalog and pricing details for PC game discovery. | https://rapidapi.com/psimavel/api/steam2 |
 | Spotify23 | Entertainment | Track, album, and artist search to drive music-focused flows. | https://rapidapi.com/Glavier/api/spotify23 |
 | Real-Time News Data | News | Headlines and breaking-news summaries from multiple outlets. | https://rapidapi.com/letscrape-6bRBa3QguO5/api/real-time-news-data |
-| Local Business Data | Realestate, Finance | Geolocated business listings, contact info, and category tags. | https://rapidapi.com/letscrape-6bRBa3QguO5/api/local-business-data |
+| Real-Time Web Search | Search | General-purpose web search results with snippets and source metadata. | https://rapidapi.com/letscrape-6bRBa3QguO5/api/real-time-web-search |
+| Local Business Data | Realestate, Finance, Search | Geolocated business listings, contact info, and category tags. | https://rapidapi.com/letscrape-6bRBa3QguO5/api/local-business-data |
 | Tasty | Food | Recipe search, including ingredients and instructions. | https://rapidapi.com/apidojo/api/tasty |
 | Twitter154 (The Old Bird) | Social | Public social posts and profile data for monitoring feeds. | https://rapidapi.com/datahungrybeast/api/twitter154 |
 | Zillow (zillow-com4) | Realestate | Property listings, valuation data, and rental insights. | https://rapidapi.com/Glavier/api/zillow-com4 |

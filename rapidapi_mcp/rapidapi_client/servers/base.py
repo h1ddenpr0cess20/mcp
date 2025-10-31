@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 import inspect
 from typing import Any, Callable, Iterable, Tuple
 
 from fastmcp import FastMCP
-
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(_PROJECT_ROOT))
 
 ToolSpec = Tuple[Callable[..., Any], str, str]
 

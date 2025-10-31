@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-if __package__ in (None, ""):
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-from servers.base import build_server
-from rapidapi_tools import get_twelve_data_price, get_twelve_data_quote
+from .base import build_server
+from ..rapidapi_tools import get_twelve_data_price, get_twelve_data_quote
 
 INSTRUCTIONS = (
     "This server wraps the Tyumi RapidAPI finance integrations. Ensure RAPIDAPI_KEY "

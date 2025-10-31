@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-if __package__ in (None, ""):
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-from servers.base import build_server
-from rapidapi_tools import (
+from .base import build_server
+from ..rapidapi_tools import (
     get_actor_details,
     get_spotify_albums,
     get_spotify_artist_albums,
@@ -21,8 +17,6 @@ from rapidapi_tools import (
     steam_get_app_reviews,
     steam_search_games,
 )
-
-from .base import build_server
 
 INSTRUCTIONS = (
     "This server wraps the Tyumi RapidAPI entertainment integrations, including IMDB, "

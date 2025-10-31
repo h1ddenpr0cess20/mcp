@@ -11,7 +11,7 @@ contributors.
   toolset and where to enable them on RapidAPI.
 - Jump to `domain_servers.md` when you need a refresher on the domain apps,
   their responsibilities, and the ports they listen on by default.
-- Visit `tests/` under `python/` for unit tests that lock in CLI behavior and
+- Visit `tests/` (when present) for unit tests that lock in CLI behavior and
   multiprocessing orchestration.
 - Add new pages whenever you integrate a new vertical or learn something
   worth sharing—keeping the documentation accurate is part of the review

@@ -1,85 +1,64 @@
-# RapidAPI FastMCP Server
+# RapidAPI MCP Server (FastMCP)
 
-A modular MCP server built from the RapidAPI tools that were available in my [Tyumi](https://github.com/h1ddenpr0cess20/Tyumi) project.  
-This collection contains all the endpoints that I had bothered to implement in that project before abandoning it.  
-I will add more as boredom dictates.  
-Feel free to add your own.
+This project wraps the RapidAPI integrations from the [Tyumi](https://github.com/h1ddenpr0cess20/Tyumi) app as FastMCP domain servers. Each domain groups related tools (jobs, finance, food, entertainment, social, real estate, news, search) behind a dedicated FastMCP instance.
 
-## Requirements
-
-- Python 3.11 or newer
-- A RapidAPI key with access to the endpoints
-
-## Setup
-
-1. *(Optional)* Create and activate a virtual environment.
-2. Install the Python dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Provide your RapidAPI key. The client reads `RAPIDAPI_KEY` from the
-   environment or an `.env` file in `python/`:
-
-   ```bash
-   # Either export the variable
-   export RAPIDAPI_KEY="your-secret-key"
-
-   # Or create python/.env with the same value
-   echo 'RAPIDAPI_KEY=your-secret-key' >> python/.env
-   ```
-
-## Running the servers
-
-### Run a single domain server
-
-Pick a domain and start only that FastMCP instance. The server logs the host and
-port on startup and blocks until you press `Ctrl+C`.
+## Quickstart
 
 ```bash
-python server.py entertainment
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+# Start one of the domain servers (jobs, finance, food, entertainment, social, realestate, news, search)
+python server.py jobs
 ```
 
-You can override the binding interface or port if the default does not work for
-your environment:
-
-```bash
-python server.py social --host 127.0.0.1 --port 9500
-```
-
-### Run every server at once
-
-Launch all domain servers simultaneously with one command. Each server is
-started in its own Python process on the default port listed below. Use
-`Ctrl+C` to stop the orchestrator; any running child processes will be cleaned
-up automatically.
+To launch every domain server at once (each on its default port):
 
 ```bash
 python server.py --all
 ```
 
-Pass `--host` if you need all services bound to a different interface:
+Use `--host`/`--port` when starting an individual server if you need different bindings.
 
+## Configuration
+
+You need a **RapidAPI key** (`RAPIDAPI_KEY`) with access to the underlying APIs.
+
+### Environment Variables
 ```bash
-python server.py --all --host 127.0.0.1
+export RAPIDAPI_KEY="your_rapidapi_key"
 ```
 
-> `--port` is not supported with `--all` because every domain already has a
-> dedicated port. Override ports only when launching individual servers.
+### .env File (Optional)
+Copy the provided example and populate your key:
+```bash
+cp .env.example .env
+```
+Edit `.env` and set `RAPIDAPI_KEY` accordingly. The client automatically loads the file via `python-dotenv`.
 
-## Default ports
+## Domain Servers & Default Ports
 
-| Domain        | Default port |
-| ------------- | ------------ |
-| jobs          | 9401         |
-| finance       | 9402         |
-| food          | 9403         |
-| entertainment | 9404         |
-| social        | 9405         |
-| realestate    | 9406         |
-| news          | 9407         |
+| Domain        | Summary of tools                                                           | Default port |
+| ------------- | -------------------------------------------------------------------------- | ------------ |
+| `jobs`        | Job searching and detail lookups via JSearch                               | 9401         |
+| `finance`     | Twelve Data price & quote endpoints                                        | 9402         |
+| `food`        | Recipe search against the Tasty API                                        | 9403         |
+| `entertainment` | IMDB metadata, Steam catalog, Spotify artist and album lookups           | 9404         |
+| `social`      | Twitter154 integrations for profiles, tweets, searches, and trends         | 9405         |
+| `realestate`  | Zillow-powered rental search and property details                          | 9406         |
+| `news`        | Real-Time News Data search, top headlines, and story coverage               | 9407         |
+| `search`      | Real-Time Web Search plus Local Business Data lookups and reviews           | 9408         |
 
-These ports are configured in `python/servers/<domain>.py` and are used when
-running `python server.py --all`. Adjust them directly in the module if
-you need different defaults across the project.
+See `docs/domain_servers.md` for the full list of endpoints exposed per domain.
+
+## Code Structure
+
+- `server.py` – command-line launcher for individual or all domain servers.
+- `rapidapi_client/rapidapi_tools/` – typed wrappers around each RapidAPI integration.
+- `rapidapi_client/servers/` – FastMCP server definitions built on the shared helper in `servers/base.py`.
+- `docs/` – additional notes, including endpoint inventories and provider documentation.
+
+## Notes
+
+- Servers run using the FastMCP HTTP transport so they can be independently bound to local ports.
+- Tools share the `RapidAPIClient` helper which automatically injects the required RapidAPI headers.
+- Contributions are welcome—add new integrations in `rapidapi_client/rapidapi_tools/` and register them in the appropriate domain server.

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-if __package__ in (None, ""):
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-from servers.base import build_server
-from rapidapi_tools import search_recipes
+from .base import build_server
+from ..rapidapi_tools import search_recipes
 
 INSTRUCTIONS = (
     "This server exposes the Tyumi RapidAPI food integrations. Configure RAPIDAPI_KEY "

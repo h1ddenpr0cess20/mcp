@@ -4,36 +4,20 @@ from __future__ import annotations
 
 import argparse
 import multiprocessing as mp
-import sys
-from importlib import import_module
-from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
 from fastmcp import FastMCP
 
-
-def _import_server_module(module_name: str):
-    """Import a domain server module from either the installed package or src layout."""
-
-    try:
-        return import_module(f"rapidapi_fastmcp_server.servers.{module_name}")
-    except ModuleNotFoundError as original_error:
-        source_root = Path(__file__).resolve().parent / "src" / "rapidapi_fastmcp_server"
-        if source_root.exists() and str(source_root) not in sys.path:
-            sys.path.insert(0, str(source_root))
-        try:
-            return import_module(f"servers.{module_name}")
-        except ModuleNotFoundError:
-            raise original_error
-
-
-entertainment = _import_server_module("entertainment")
-finance = _import_server_module("finance")
-food = _import_server_module("food")
-jobs = _import_server_module("jobs")
-news = _import_server_module("news")
-realestate = _import_server_module("realestate")
-social = _import_server_module("social")
+from rapidapi_client.servers import (
+    entertainment,
+    finance,
+    food,
+    jobs,
+    news,
+    search,
+    realestate,
+    social,
+)
 
 ENTERTAINMENT_HOST = entertainment.DEFAULT_HOST
 ENTERTAINMENT_PORT = entertainment.DEFAULT_PORT
@@ -60,6 +44,11 @@ NEWS_PORT = news.DEFAULT_PORT
 news_server = news.server
 run_news_server = news.run_server
 
+SEARCH_HOST = search.DEFAULT_HOST
+SEARCH_PORT = search.DEFAULT_PORT
+search_server = search.server
+run_search_server = search.run_server
+
 REALESTATE_HOST = realestate.DEFAULT_HOST
 REALESTATE_PORT = realestate.DEFAULT_PORT
 realestate_server = realestate.server
@@ -78,6 +67,7 @@ SERVERS: Dict[str, ServerEntry] = {
     "food": (food_server, run_food_server, FOOD_HOST, FOOD_PORT),
     "jobs": (jobs_server, run_jobs_server, JOBS_HOST, JOBS_PORT),
     "news": (news_server, run_news_server, NEWS_HOST, NEWS_PORT),
+    "search": (search_server, run_search_server, SEARCH_HOST, SEARCH_PORT),
     "realestate": (realestate_server, run_realestate_server, REALESTATE_HOST, REALESTATE_PORT),
     "social": (social_server, run_social_server, SOCIAL_HOST, SOCIAL_PORT),
 }
