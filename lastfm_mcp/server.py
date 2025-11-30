@@ -6,7 +6,6 @@ from fastmcp import FastMCP
 from lastfm_client.client import (
     AlbumAPI,
     ArtistAPI,
-    AuthAPI,
     ChartAPI,
     GeoAPI,
     LibraryAPI,
@@ -32,7 +31,6 @@ def _clients() -> Dict[str, Any]:
     return {
         "album": AlbumAPI(api_key, api_secret, session_key),
         "artist": ArtistAPI(api_key, api_secret, session_key),
-        "auth": AuthAPI(api_key, api_secret, session_key),
         "chart": ChartAPI(api_key, api_secret, session_key),
         "geo": GeoAPI(api_key, api_secret, session_key),
         "library": LibraryAPI(api_key, api_secret, session_key),
@@ -43,27 +41,6 @@ def _clients() -> Dict[str, Any]:
 
 
 # -------- Album tools --------
-@mcp.tool(description="album.addTags — Tag an album (requires auth)")
-def album_add_tags(
-    artist: str,
-    album: str,
-    tags: str,
-    sk: Optional[str] = None
-):
-    """Tag an album (requires auth).
-
-    Args:
-        artist: The artist name.
-        album: The album name.
-        tags: Comma-separated list of tags.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["album"].add_tags(artist, album, tags, sk)
-
-
 @mcp.tool(description="album.getInfo — Get album metadata & tracks")
 def album_get_info(
     artist: Optional[str] = None,
@@ -135,27 +112,6 @@ def album_get_top_tags(
     return _clients()["album"].get_top_tags(artist, album, mbid, autocorrect)
 
 
-@mcp.tool(description="album.removeTag — Remove a tag from an album (requires auth)")
-def album_remove_tag(
-    artist: str,
-    album: str,
-    tag: str,
-    sk: Optional[str] = None
-):
-    """Remove a tag from an album (requires auth).
-
-    Args:
-        artist: The artist name.
-        album: The album name.
-        tag: The tag to remove.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["album"].remove_tag(artist, album, tag, sk)
-
-
 @mcp.tool(description="album.search — Search for albums")
 def album_search(
     album: str,
@@ -176,25 +132,6 @@ def album_search(
 
 
 # -------- Artist tools --------
-@mcp.tool(description="artist.addTags — Tag an artist (requires auth)")
-def artist_add_tags(
-    artist: str,
-    tags: str,
-    sk: Optional[str] = None
-):
-    """Tag an artist (requires auth).
-
-    Args:
-        artist: The artist name.
-        tags: Comma-separated list of tags.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["artist"].add_tags(artist, tags, sk)
-
-
 @mcp.tool(description="artist.getCorrection — Get canonical correction for artist name")
 def artist_get_correction(
     artist: str
@@ -340,21 +277,6 @@ def artist_get_top_tracks(
     return _clients()["artist"].get_top_tracks(artist, mbid, autocorrect, page, limit)
 
 
-@mcp.tool(description="artist.removeTag — Remove tag from artist (requires auth)")
-def artist_remove_tag(artist: str, tag: str, sk: Optional[str] = None):
-    """Remove tag from artist (requires auth).
-
-    Args:
-        artist: The artist name.
-        tag: The tag to remove.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["artist"].remove_tag(artist, tag, sk)
-
-
 @mcp.tool(description="artist.search — Search for artists")
 def artist_search(artist: str, limit: Optional[int] = None, page: Optional[int] = None):
     """Search for artists.
@@ -368,46 +290,6 @@ def artist_search(artist: str, limit: Optional[int] = None, page: Optional[int] 
         Dict containing search results.
     """
     return _clients()["artist"].search(artist, limit, page)
-
-
-# -------- Auth tools --------
-@mcp.tool(
-    description="auth.getMobileSession — Exchange username/password for session (mobile)"
-)
-def auth_get_mobile_session(username: str, password: str):
-    """Exchange username/password for session (mobile).
-
-    Args:
-        username: Last.fm username.
-        password: Last.fm password.
-
-    Returns:
-        Dict containing session information.
-    """
-    return _clients()["auth"].get_mobile_session(username, password)
-
-
-@mcp.tool(description="auth.getSession — Exchange token for session")
-def auth_get_session(token: str):
-    """Exchange token for session.
-
-    Args:
-        token: Unauthorized token obtained earlier.
-
-    Returns:
-        Dict containing session information.
-    """
-    return _clients()["auth"].get_session(token)
-
-
-@mcp.tool(description="auth.getToken — Get an unauthorized token")
-def auth_get_token():
-    """Get an unauthorized token.
-
-    Returns:
-        Dict containing an unauthorized token for authentication flow.
-    """
-    return _clients()["auth"].get_token()
 
 
 # -------- Chart tools --------
@@ -613,22 +495,6 @@ def tag_get_weekly_chart_list(tag: str):
 
 
 # -------- Track tools --------
-@mcp.tool(description="track.addTags — Tag a track (requires auth)")
-def track_add_tags(artist: str, track: str, tags: str, sk: Optional[str] = None):
-    """Tag a track (requires auth).
-
-    Args:
-        artist: The artist name.
-        track: The track name.
-        tags: Comma-separated list of tags.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["track"].add_tags(artist, track, tags, sk)
-
-
 @mcp.tool(description="track.getCorrection — Canonical correction for track")
 def track_get_correction(artist: str, track: str):
     """Canonical correction for track.
@@ -733,70 +599,6 @@ def track_get_top_tags(
     return _clients()["track"].get_top_tags(artist, track, mbid, autocorrect)
 
 
-@mcp.tool(description="track.love — Mark a track as loved (requires auth)")
-def track_love(artist: str, track: str, sk: Optional[str] = None):
-    """Mark a track as loved (requires auth).
-
-    Args:
-        artist: The artist name.
-        track: The track name.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["track"].love(artist, track, sk)
-
-
-@mcp.tool(description="track.removeTag — Remove a tag from a track (requires auth)")
-def track_remove_tag(artist: str, track: str, tag: str, sk: Optional[str] = None):
-    """Remove a tag from a track (requires auth).
-
-    Args:
-        artist: The artist name.
-        track: The track name.
-        tag: The tag to remove.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["track"].remove_tag(artist, track, tag, sk)
-
-
-@mcp.tool(description="track.scrobble — Add a scrobble (requires auth)")
-def track_scrobble(
-    artist: str,
-    track: str,
-    timestamp: int,
-    album: Optional[str] = None,
-    album_artist: Optional[str] = None,
-    track_number: Optional[int] = None,
-    mbid: Optional[str] = None,
-    duration: Optional[int] = None,
-    sk: Optional[str] = None,
-):
-    """Add a scrobble (requires auth).
-
-    Args:
-        artist: The artist name.
-        track: The track name.
-        timestamp: Unix timestamp of when the track was listened.
-        album: The album name.
-        album_artist: The album artist name.
-        track_number: The track number on the album.
-        mbid: MusicBrainz ID.
-        duration: The track duration in seconds.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["track"].scrobble(
-        artist, track, timestamp, album, album_artist, track_number, mbid, duration, sk
-    )
-
-
 @mcp.tool(description="track.search — Search for tracks")
 def track_search(
     track: str,
@@ -816,52 +618,6 @@ def track_search(
         Dict containing search results.
     """
     return _clients()["track"].search(track, artist, limit, page)
-
-
-@mcp.tool(description="track.unlove — Unmark loved (requires auth)")
-def track_unlove(artist: str, track: str, sk: Optional[str] = None):
-    """Unmark loved (requires auth).
-
-    Args:
-        artist: The artist name.
-        track: The track name.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["track"].unlove(artist, track, sk)
-
-
-@mcp.tool(description="track.updateNowPlaying — Set now playing (requires auth)")
-def track_update_now_playing(
-    artist: str,
-    track: str,
-    album: Optional[str] = None,
-    album_artist: Optional[str] = None,
-    track_number: Optional[int] = None,
-    duration: Optional[int] = None,
-    mbid: Optional[str] = None,
-    sk: Optional[str] = None,
-):
-    """Set now playing (requires auth).
-
-    Args:
-        artist: The artist name.
-        track: The track name.
-        album: The album name.
-        album_artist: The album artist name.
-        track_number: The track number on the album.
-        duration: The track duration in seconds.
-        mbid: MusicBrainz ID.
-        sk: Session key for authentication.
-
-    Returns:
-        Dict containing the API response.
-    """
-    return _clients()["track"].update_now_playing(
-        artist, track, album, album_artist, track_number, duration, mbid, sk
-    )
 
 
 # -------- User tools --------
