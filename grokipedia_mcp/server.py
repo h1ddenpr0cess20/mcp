@@ -18,7 +18,8 @@ def scrape_grokipedia(
         page_title: The page title (e.g., "Elon Musk").
 
     Returns:
-        dict with keys: page_title, url, content (list of sections).
+        dict with keys: page_title, url, content (list of sections),
+        info_panels (list of structured panel objects).
     """
     return _scraper.scrape_page(page_title)
 

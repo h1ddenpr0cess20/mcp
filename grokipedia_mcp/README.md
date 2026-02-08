@@ -12,7 +12,7 @@ python server.py  # runs an MCP server; see FastMCP docs for client hookup
 
 ## Description
 
-The server exposes a single tool `scrape_grokipedia` that takes a page title and returns structured content from Grokipedia, parsed into sections with headings and blocks of text.
+The server exposes a single tool `scrape_grokipedia` that takes a page title and returns structured content from Grokipedia, parsed into sections with headings/blocks plus structured info panels.
 
 ## Notes
 
