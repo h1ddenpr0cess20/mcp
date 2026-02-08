@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import Mock, patch
+import requests
 
 from grokipedia_client.client import GrokipediaScraper
 
@@ -74,13 +75,15 @@ class TestGrokipediaScraper:
             assert result["page_title"] == "Test Page"
             assert "grokipedia.com/page/Test_Page" in result["url"]
             assert "content" in result
+            assert "info_panels" in result
             assert isinstance(result["content"], list)
+            assert isinstance(result["info_panels"], list)
             assert len(result["content"]) > 0
 
     def test_scrape_page_http_error(self):
         """Test scrape_page error handling."""
         with patch("grokipedia_client.client.requests.get") as mock_get:
-            mock_get.side_effect = Exception("Network error")
+            mock_get.side_effect = requests.RequestException("Network error")
 
             scraper = GrokipediaScraper()
             result = scraper.scrape_page("Test Page")
@@ -90,6 +93,49 @@ class TestGrokipediaScraper:
             assert "error" in result
             assert "Network error" in result["error"]
             assert "content" not in result
+
+    def test_scrape_page_extracts_info_panel(self, sample_html_with_info_panel):
+        """Test info panel extraction from aside content."""
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = sample_html_with_info_panel
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            scraper = GrokipediaScraper()
+            result = scraper.scrape_page("Test Person")
+
+            assert "info_panels" in result
+            assert len(result["info_panels"]) == 1
+
+            panel = result["info_panels"][0]
+            assert "fields" in panel
+            assert panel["fields"][0]["label"] == "Birth Date"
+            assert panel["fields"][0]["values"] == ["January 1, 1990"]
+            assert panel["fields"][1]["label"] == "Nationality"
+            assert panel["fields"][1]["values"] == ["American", "Canadian"]
+
+            assert "image" in panel
+            assert panel["image"]["src"] == "https://grokipedia.com/images/test-person.jpg"
+            assert panel["image"]["alt"] == "Test person portrait"
+            assert panel["image"]["caption"] == "Test person in 2025."
+
+    def test_scrape_sections_excludes_aside_content(self, sample_html_with_info_panel):
+        """Test that section content excludes aside info panel fields."""
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = sample_html_with_info_panel
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            scraper = GrokipediaScraper()
+            sections = scraper.scrape_sections("Test Person")
+
+            assert len(sections) == 2
+            all_blocks = [block for section in sections for block in section["blocks"]]
+            assert "January 1, 1990" not in all_blocks
+            assert "American" not in all_blocks
+            assert "Canadian" not in all_blocks
 
     def test_url_formatting(self):
         """Test that page titles are properly URL-encoded."""

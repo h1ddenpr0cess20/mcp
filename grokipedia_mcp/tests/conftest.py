@@ -24,6 +24,44 @@ def sample_html():
 
 
 @pytest.fixture
+def sample_html_with_info_panel():
+    """Sample HTML that includes an info panel in an aside."""
+    return """
+    <html>
+    <body>
+        <article>
+            <h1>Test Person</h1>
+            <p>Lead paragraph.</p>
+            <aside>
+                <div>
+                    <figure>
+                        <img src="/images/test-person.jpg" alt="Test person portrait" />
+                        <figcaption>Test person in 2025.</figcaption>
+                    </figure>
+                </div>
+                <div>
+                    <div>
+                        <dt>Birth Date</dt>
+                        <dd>January 1, 1990</dd>
+                    </div>
+                    <div>
+                        <dt>Nationality</dt>
+                        <dd>
+                            <span>American</span>
+                            <span>Canadian</span>
+                        </dd>
+                    </div>
+                </div>
+            </aside>
+            <h2>Career</h2>
+            <p>Career paragraph.</p>
+        </article>
+    </body>
+    </html>
+    """
+
+
+@pytest.fixture
 def mock_requests_response(sample_html):
     """Mock response object for requests."""
     mock_response = Mock()
