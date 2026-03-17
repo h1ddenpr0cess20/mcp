@@ -27,5 +27,5 @@ def scrape_grokipedia(
 if __name__ == "__main__":
     # Default transport is STDIO; great for local dev / MCP clients.
     mcp.run()
-    # mcp.run(transport="http", host="127.0.0.1", port=8000, path="/mcp")
-    # mcp.run(transport="sse",  host="127.0.0.1", port=8000)
+    # mcp.run(transport="http", host="127.0.0.1", port=9101, path="/mcp")
+    # mcp.run(transport="sse",  host="127.0.0.1", port=9101)
