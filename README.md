@@ -23,6 +23,15 @@ FastMCP server for scraping and structuring content from Grokipedia pages.
 - Web scraping using BeautifulSoup
 - Clean separation between scraping logic and MCP server
 
+### Yahoo Finance MCP (`yfinance_mcp/`)
+FastMCP server exposing Yahoo Finance data as MCP tools. No API key required.
+- Real-time quotes, market summary, market status
+- Historical OHLCV data with configurable intervals
+- Symbol search
+- Company profiles, income statements, balance sheets, earnings
+- Analyst price targets and recommendations
+- Options chains and news
+
 ### RapidAPI MCP (`rapidapi_mcp/`)
 Suite of FastMCP servers wrapping the RapidAPI integrations used in the [Tyumi](http://github.com/h1ddenpr0cess20/Tyumi) project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
 

@@ -1,14 +1,14 @@
 # Last.fm MCP Server (FastMCP)
 
-This project exposes **every Last.fm API method** listed on https://www.last.fm/api as MCP tools using **FastMCP**.
-Tools are separated by type (album, artist, auth, chart, geo, library, tag, track, user).
+This project exposes Last.fm API read methods as MCP tools using **FastMCP**.
+Tools are separated by type (album, artist, chart, geo, library, tag, track, user).
 
 ## Quickstart
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python server.py  # runs an MCP server; see FastMCP docs for client hookup
+# From the repo root (mcp/)
+pip install -r lastfm_mcp/requirements.txt
+python lastfm_mcp/server.py
 ```
 
 ## Demo Script
@@ -52,7 +52,7 @@ The codebase is organized for maintainability:
 
 - `lastfm_client/base.py`: Base API class with shared functionality
 - `lastfm_client/client.py`: Unified client aggregating all APIs
-- `lastfm_client/[album|artist|auth|chart|geo|library|tag|track|user].py`: Individual API implementations per Last.fm service type
+- `lastfm_client/[album|artist|chart|geo|library|tag|track|user].py`: Individual API implementations per Last.fm service type
 - `server.py`: FastMCP server with tool registrations
 
 ## Notes
