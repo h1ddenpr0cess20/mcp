@@ -79,6 +79,48 @@ def mock_get_request(mock_requests_response):
 
 
 @pytest.fixture
+def sample_search_html():
+    """Sample HTML for Grokipedia search results."""
+    return """
+    <html>
+    <body>
+        <a class="group block" href="/page/python_efteling"
+           data-search-result-link="true"
+           data-slug="python_efteling"
+           data-search-snippet="Python is a steel roller coaster at Efteling.">
+            <div>
+                <span class="font-medium">Python (Efteling)</span>
+            </div>
+        </a>
+        <a class="group block" href="/page/Python_programming_language"
+           data-search-result-link="true"
+           data-slug="Python_programming_language"
+           data-search-snippet="An overview of the Python programming language.">
+            <div>
+                <span class="font-medium">Python (programming language)</span>
+            </div>
+        </a>
+        <a href="/search?q=python&page=2">2</a>
+        <a href="/search?q=python&page=3">3</a>
+        <a href="/search?q=python&page=10">10</a>
+    </body>
+    </html>
+    """
+
+
+@pytest.fixture
+def sample_search_html_empty():
+    """Sample HTML for an empty Grokipedia search."""
+    return """
+    <html>
+    <body>
+        <p>No results found.</p>
+    </body>
+    </html>
+    """
+
+
+@pytest.fixture
 def mock_error_response():
     """Mock response that raises an error."""
     mock_response = Mock()
