@@ -96,8 +96,8 @@ def sample_html():
 
 
 @pytest.fixture
-def mock_httpx_response(sample_html):
-    """Mock httpx.Response for fetch tests."""
+def mock_curl_response(sample_html):
+    """Mock curl_cffi response for fetch tests."""
     mock = MagicMock()
     mock.text = sample_html
     mock.status_code = 200
