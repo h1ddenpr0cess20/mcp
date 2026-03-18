@@ -9,9 +9,10 @@ from web_client._searxng import ensure_running
 SEARXNG_URL = os.environ.get("SEARXNG_URL") or ensure_running()
 SEARXNG_TIMEOUT = float(os.environ.get("SEARXNG_TIMEOUT", "30"))
 FETCH_TIMEOUT = float(os.environ.get("FETCH_TIMEOUT", "30"))
+FETCH_PROXIES = [p.strip() for p in os.environ.get("FETCH_PROXIES", "").split(",") if p.strip()]
 
 _search = SearchClient(SEARXNG_URL, timeout=SEARXNG_TIMEOUT)
-_fetch = FetchClient(timeout=FETCH_TIMEOUT)
+_fetch = FetchClient(timeout=FETCH_TIMEOUT, proxies=FETCH_PROXIES or None)
 
 mcp = FastMCP("web")
 
