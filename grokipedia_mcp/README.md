@@ -5,9 +5,9 @@ This project provides an MCP server for scraping Grokipedia pages using **FastMC
 ## Quickstart
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python server.py  # runs an MCP server; see FastMCP docs for client hookup
+# From the repo root (mcp/)
+pip install -r grokipedia_mcp/requirements.txt
+python grokipedia_mcp/server.py
 ```
 
 ## Description
