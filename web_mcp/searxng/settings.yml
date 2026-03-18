@@ -1,0 +1,159 @@
+use_default_settings:
+  engines:
+    keep_only:
+      - adobe stock
+      - apk mirror
+      - arch linux wiki
+      - artic
+      - artstation
+      - arxiv
+      - askubuntu
+      - bandcamp
+      - bing images
+      - bing news
+      - bing videos
+      - brave
+      - brave.images
+      - brave.news
+      - brave.videos
+      - bt4g
+      - chefkoch
+      - currency
+      - dailymotion
+      - ddg definitions
+      - deviantart
+      - devicons
+      - dictzone
+      - docker hub
+      - duckduckgo
+      - duckduckgo images
+      - duckduckgo news
+      - duckduckgo videos
+      - emojipedia
+      - erowid
+      - etymonline
+      - fdroid
+      - findthatmeme
+      - flickr
+      - frinkiac
+      - genius
+      - gentoo
+      - github
+      - gitlab
+      - goodreads
+      - google
+      - google images
+      - google news
+      - google scholar
+      - google videos
+      - hoogle
+      - huggingface
+      - imdb
+      - imgur
+      - kickass
+      - library genesis
+      - library of congress
+      - lingva
+      - lucide
+      - mankier
+      - mdn
+      - mixcloud
+      - mymemory translated
+      - npm
+      - nyaa
+      - ollama
+      - openairedatasets
+      - openairepublications
+      - openlibrary
+      - openmeteo
+      - openstreetmap
+      - openverse
+      - pdbe
+      - pexels
+      - photon
+      - pinterest
+      - piratebay
+      - pixabay images
+      - podcastindex
+      - public domain image archive
+      - pubmed
+      - pypi
+      - qwant images
+      - qwant news
+      - qwant videos
+      - radio browser
+      - reuters
+      - rottentomatoes
+      - rumble
+      - semantic scholar
+      - sepiasearch
+      - solidtorrents
+      - soundcloud
+      - stackoverflow
+      - startpage
+      - startpage images
+      - startpage news
+      - steam
+      - superuser
+      - tineye
+      - tmdb
+      - unsplash
+      - vimeo
+      - wikibooks
+      - wikicommons.audio
+      - wikicommons.files
+      - wikicommons.images
+      - wikicommons.videos
+      - wikidata
+      - wikinews
+      - wikipedia
+      - wikiquote
+      - wikisource
+      - wikiversity
+      - wiktionary
+      - wolframalpha
+      - wordnik
+      - wttr.in
+      - yahoo news
+      - youtube
+      - 1337x
+
+general:
+  instance_name: "web-mcp searxng"
+  debug: false
+
+server:
+  port: 8888
+  bind_address: "127.0.0.1"
+  secret_key: "web-mcp-searxng-local-dev"
+  limiter: false
+  image_proxy: true
+  method: POST
+
+search:
+  safe_search: 0
+  default_lang: "en"
+  formats:
+    - html
+    - json
+  default_categories:
+    - general
+    - images
+    - videos
+    - news
+    - music
+    - it
+
+ui:
+  default_theme: simple
+  theme_args:
+    simple_style: dark
+  query_in_title: false
+  search_on_category_select: true
+  center_alignment: false
+  url_formatting: pretty
+  hotkeys: default
+
+doi_resolvers:
+  oadoi.org: "https://oadoi.org/"
+default_doi_resolver: oadoi.org
