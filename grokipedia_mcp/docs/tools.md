@@ -7,6 +7,7 @@ Complete reference for all tools exposed by the Grokipedia MCP server.
 ## Table of Contents
 
 - [scrape_grokipedia](#scrape_grokipedia)
+- [search_grokipedia](#search_grokipedia)
 - [Return Value Structure](#return-value-structure)
 - [Error Handling](#error-handling)
 
@@ -57,6 +58,50 @@ On a network or HTTP error, the response omits `content` and `info_panels` and i
 - Extract factual fields (birth date, nationality, occupation) from the info panel without parsing prose.
 - Feed article sections into a summarisation or question-answering workflow.
 - Retrieve the canonical Grokipedia URL for a given topic.
+
+---
+
+## search_grokipedia
+
+Searches Grokipedia for pages matching a query string and returns a paginated list of results. Each result includes a title, slug, snippet, and URL. Use this to discover pages when you don't know the exact title, or to find pages related to a broad topic.
+
+**Parameters**
+
+| Parameter | Type    | Required | Description                                      |
+|-----------|---------|----------|--------------------------------------------------|
+| query     | string  | yes      | The search query string, e.g. `"python"`         |
+| page      | integer | no       | Page number for pagination (default `1`)         |
+
+**URL pattern**
+
+```
+https://grokipedia.com/search?q={query}&page={page}
+```
+
+**Returns**
+
+A dictionary with the following top-level keys:
+
+| Key         | Type            | Description                                              |
+|-------------|-----------------|----------------------------------------------------------|
+| query       | string          | The query as passed in                                   |
+| page        | integer         | The page number returned                                 |
+| results     | list of objects | Search results; see [Search results](#search-results)    |
+| total_pages | integer         | The highest page number found in pagination links        |
+
+On a network or HTTP error, the response omits `results` and `total_pages` and instead returns:
+
+| Key   | Type   | Description                            |
+|-------|--------|----------------------------------------|
+| query | string | The query as passed in                 |
+| page  | integer| The page number requested              |
+| error | string | Human-readable description of the error |
+
+**Use cases**
+
+- Discover Grokipedia pages when you don't know the exact title.
+- Find all pages related to a broad topic (e.g. "quantum" returns pages on quantum computing, quantum mechanics, quantum entanglement, etc.).
+- Browse search results before deciding which page to scrape in full with `scrape_grokipedia`.
 
 ---
 
@@ -126,6 +171,35 @@ Example:
     "alt": "Marie Curie",
     "caption": "Marie Curie, c. 1903"
   }
+}
+```
+
+### Search results
+
+`results` is a list of result objects. Each result corresponds to one matching page.
+
+| Field   | Type   | Description                                                  |
+|---------|--------|--------------------------------------------------------------|
+| title   | string | The page title, e.g. `"Python (programming language)"`       |
+| slug    | string | The URL slug, e.g. `"Python_programming_language"`           |
+| snippet | string | A short excerpt describing the page content                  |
+| url     | string | Full URL to the page, e.g. `"https://grokipedia.com/page/Python_programming_language"` |
+
+Example:
+
+```json
+{
+  "query": "python",
+  "page": 1,
+  "results": [
+    {
+      "title": "Python (programming language)",
+      "slug": "Python_programming_language",
+      "snippet": "An overview of the Python programming language, including resources and methods for learning it.",
+      "url": "https://grokipedia.com/page/Python_programming_language"
+    }
+  ],
+  "total_pages": 834
 }
 ```
 

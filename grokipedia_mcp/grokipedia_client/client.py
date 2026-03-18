@@ -140,6 +140,74 @@ class GrokipediaScraper:
             return [s for s in non_empty_sections if s["heading"] is not None]
         return non_empty_sections
 
+    def search(
+        self,
+        query: str,
+        page: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Search Grokipedia and return structured results.
+
+        Args:
+            query: The search query string.
+            page: Page number for pagination (default 1).
+
+        Returns:
+            dict with keys: query, page, results (list of dicts with
+            title, slug, snippet), total_pages.
+        """
+        url = f"https://grokipedia.com/search?q={query}&page={page}"
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            results: List[Dict[str, str]] = []
+            for link in soup.find_all("a", attrs={"data-search-result-link": True}):
+                slug = link.get("data-slug", "")
+                snippet = link.get("data-search-snippet", "")
+                title_span = link.find("span", class_="font-medium")
+                title = title_span.get_text(strip=True) if title_span else ""
+                if not title:
+                    # Fallback: first span with text
+                    for span in link.find_all("span"):
+                        t = span.get_text(strip=True)
+                        if t:
+                            title = t
+                            break
+                if title:
+                    results.append({
+                        "title": title,
+                        "slug": slug,
+                        "snippet": snippet,
+                        "url": f"https://grokipedia.com/page/{slug}",
+                    })
+
+            # Extract total pages from pagination links
+            total_pages = page
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if f"q={query}" in href and "&page=" in href:
+                    try:
+                        p = int(href.split("&page=")[-1])
+                        if p > total_pages:
+                            total_pages = p
+                    except ValueError:
+                        pass
+
+            return {
+                "query": query,
+                "page": page,
+                "results": results,
+                "total_pages": total_pages,
+            }
+        except requests.RequestException as e:
+            return {
+                "query": query,
+                "page": page,
+                "error": f"Search failed: {e}",
+            }
+
     def scrape_sections(
         self,
         page_title: str

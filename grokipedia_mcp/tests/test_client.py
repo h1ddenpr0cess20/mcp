@@ -154,6 +154,76 @@ class TestGrokipediaScraper:
             assert "Test_Page" in url
             assert "https://grokipedia.com/page/Test_Page" == url
 
+    def test_search_success(self, sample_search_html):
+        """Test successful search with results and pagination."""
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = sample_search_html
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            scraper = GrokipediaScraper()
+            result = scraper.search("python")
+
+            assert result["query"] == "python"
+            assert result["page"] == 1
+            assert result["total_pages"] == 10
+            assert len(result["results"]) == 2
+
+            assert result["results"][0]["title"] == "Python (Efteling)"
+            assert result["results"][0]["slug"] == "python_efteling"
+            assert result["results"][0]["snippet"] == "Python is a steel roller coaster at Efteling."
+            assert result["results"][0]["url"] == "https://grokipedia.com/page/python_efteling"
+
+            assert result["results"][1]["title"] == "Python (programming language)"
+            assert result["results"][1]["slug"] == "Python_programming_language"
+
+    def test_search_empty_results(self, sample_search_html_empty):
+        """Test search with no matching results."""
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = sample_search_html_empty
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            scraper = GrokipediaScraper()
+            result = scraper.search("xyznonexistent")
+
+            assert result["query"] == "xyznonexistent"
+            assert result["page"] == 1
+            assert result["results"] == []
+            assert result["total_pages"] == 1
+
+    def test_search_pagination(self, sample_search_html):
+        """Test search with explicit page parameter."""
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = sample_search_html
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            scraper = GrokipediaScraper()
+            result = scraper.search("python", page=3)
+
+            assert result["page"] == 3
+            mock_get.assert_called_once_with(
+                "https://grokipedia.com/search?q=python&page=3",
+                timeout=30,
+            )
+
+    def test_search_http_error(self):
+        """Test search error handling."""
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_get.side_effect = requests.RequestException("Network error")
+
+            scraper = GrokipediaScraper()
+            result = scraper.search("python")
+
+            assert result["query"] == "python"
+            assert result["page"] == 1
+            assert "error" in result
+            assert "Network error" in result["error"]
+
     def test_parsing_different_html_structures(self):
         """Test parsing with different HTML element structures."""
         test_html = """

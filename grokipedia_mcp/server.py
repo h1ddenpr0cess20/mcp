@@ -24,6 +24,25 @@ def scrape_grokipedia(
     return _scraper.scrape_page(page_title)
 
 
+@mcp.tool
+def search_grokipedia(
+    query: str,
+    page: int = 1
+) -> dict:
+    """
+    Search Grokipedia for pages matching a query.
+
+    Args:
+        query: The search query string.
+        page: Page number for pagination (default 1).
+
+    Returns:
+        dict with keys: query, page, results (list of dicts with
+        title, slug, snippet, url), total_pages.
+    """
+    return _scraper.search(query, page)
+
+
 if __name__ == "__main__":
     # Default transport is STDIO; great for local dev / MCP clients.
     mcp.run()

@@ -10,6 +10,7 @@ Practical workflows showing how to use the Grokipedia MCP server for common rese
 - [Research a Concept or Topic](#research-a-concept-or-topic)
 - [Extract Structured Facts](#extract-structured-facts)
 - [Research a Place or Organisation](#research-a-place-or-organisation)
+- [Search for Pages](#search-for-pages)
 - [Chaining Multiple Lookups](#chaining-multiple-lookups)
 - [Sample Questions for an AI Assistant](#sample-questions-for-an-ai-assistant)
 
@@ -123,6 +124,40 @@ scrape_grokipedia("Tokyo")
 
 ---
 
+## Search for Pages
+
+**Goal:** Find Grokipedia pages related to a topic when you don't know the exact page title.
+
+**Tool call:**
+
+```
+search_grokipedia("quantum")
+```
+
+The response will include a list of matching pages with titles, snippets, and URLs. You can then use `scrape_grokipedia` to fetch the full content of any result.
+
+**Sample prompts to an AI assistant:**
+
+> Search Grokipedia for articles about quantum computing.
+
+> I'm looking for pages about the French Revolution on Grokipedia — search for them.
+
+> Find all Grokipedia pages related to "machine learning" and list the top results.
+
+**Paginating through results:**
+
+```
+search_grokipedia("quantum", page=2)
+```
+
+Each response includes `total_pages` so you know how many pages of results are available.
+
+**Tips:**
+- Use search to discover the correct page title before calling `scrape_grokipedia`. This avoids 404 errors from guessing titles.
+- Search returns up to 12 results per page. Use the `page` parameter to browse further.
+
+---
+
 ## Chaining Multiple Lookups
 
 **Goal:** Compare or connect information across multiple Grokipedia pages.
@@ -151,7 +186,7 @@ scrape_grokipedia("Tokyo")
 
 ## Sample Questions for an AI Assistant
 
-The following questions illustrate what you can ask an AI assistant that has this MCP server connected. The assistant will call `scrape_grokipedia` on your behalf and synthesise the response.
+The following questions illustrate what you can ask an AI assistant that has this MCP server connected. The assistant will call `search_grokipedia` or `scrape_grokipedia` on your behalf and synthesise the response.
 
 **People**
 - Who was Nikola Tesla and what is he known for?
