@@ -32,6 +32,13 @@ FastMCP server exposing Yahoo Finance data as MCP tools. No API key required.
 - Analyst price targets and recommendations
 - Options chains and news
 
+### Web MCP (`web_mcp/`)
+FastMCP server for web search and URL fetching. No API key required.
+- Web search via a local self-managed SearXNG instance (auto-installs on first run)
+- News search with time filtering
+- URL fetch with content extraction (Markdown, text, or raw HTML)
+- Queries multiple engines simultaneously: Google, Bing, Brave, DuckDuckGo, Startpage, and more
+
 ### RapidAPI MCP (`rapidapi_mcp/`)
 Suite of FastMCP servers wrapping the RapidAPI integrations used in the [Tyumi](http://github.com/h1ddenpr0cess20/Tyumi) project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
 
