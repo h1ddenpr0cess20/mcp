@@ -39,6 +39,15 @@ FastMCP server for web search and URL fetching. No API key required.
 - URL fetch with content extraction (Markdown, text, or raw HTML)
 - Queries multiple engines simultaneously: Google, Bing, Brave, DuckDuckGo, Startpage, and more
 
+### Shell MCP (`shell_mcp/`)
+FastMCP server for shell execution and file operations over SSH. Optionally auto-provisions a VirtualBox VM (Debian 13) as an isolated sandbox.
+- Execute commands, read/write files, upload/download via SFTP
+- List directories, get system info (memory, disk, uptime)
+- Fetch generated files via a local HTTP URL
+- Auto-creates and manages a Debian VM if VirtualBox is installed; otherwise connects to any SSH host
+
+**Requirements**: SSH-accessible target, or VirtualBox with `vboxmanage` on PATH
+
 ### RapidAPI MCP (`rapidapi_mcp/`)
 Suite of FastMCP servers wrapping the RapidAPI integrations used in the [Tyumi](http://github.com/h1ddenpr0cess20/Tyumi) project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
 

@@ -2,6 +2,10 @@
 
 import os
 from typing import Any, Mapping
+
+from dotenv import load_dotenv
+
+load_dotenv()
 from urllib.parse import urlparse
 
 import httpx
