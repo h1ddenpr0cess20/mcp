@@ -39,6 +39,15 @@ FastMCP server for web search and URL fetching. No API key required.
 - URL fetch with content extraction (Markdown, text, or raw HTML)
 - Queries multiple engines simultaneously: Google, Bing, Brave, DuckDuckGo, Startpage, and more
 
+### Android MCP (`android_mcp/`)
+FastMCP server for controlling an Android device via ADB. Screenshots are served over HTTPS for vision model analysis.
+- Shell commands, UI interaction (tap, swipe, type, key press), UI hierarchy dump
+- App management (install, uninstall, launch, stop, list, clear data)
+- Screenshot capture with compression, served via built-in HTTPS file server
+- Device info, file push/pull, screen wake/state
+
+**Requirements**: `adb` and `openssl` on PATH, connected Android device with USB debugging enabled
+
 ### Shell MCP (`shell_mcp/`)
 FastMCP server for shell execution and file operations over SSH. Optionally auto-provisions a VirtualBox VM (Debian 13) as an isolated sandbox.
 - Execute commands, read/write files, upload/download via SFTP
