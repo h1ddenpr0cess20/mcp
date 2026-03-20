@@ -36,10 +36,13 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 9405
 
 
-def run_server(*, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
-    """Run the social server using the HTTP transport."""
-
-    server.run(transport="http", host=host, port=port)
+def run_server(*, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, force_http: bool = False) -> None:
+    """Run the social server. HTTP if launched directly or force_http, stdio if piped."""
+    import sys
+    if force_http or sys.stdin.isatty():
+        server.run(transport="http", host=host, port=port)
+    else:
+        server.run()
 
 
 if __name__ == "__main__":

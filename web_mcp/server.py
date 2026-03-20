@@ -106,6 +106,8 @@ def fetch_url(
 
 
 if __name__ == "__main__":
-    mcp.run()
-    # mcp.run(transport="http", host="127.0.0.1", port=9500, path="/mcp")
-    # mcp.run(transport="sse", host="127.0.0.1", port=9500)
+    import sys
+    if sys.stdin.isatty():
+        mcp.run(transport="http", host="127.0.0.1", port=9500, path="/mcp")
+    else:
+        mcp.run()
