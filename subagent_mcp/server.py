@@ -221,7 +221,7 @@ def remove_mcp_server(name: str) -> dict:
 
 @mcp.tool
 def list_mcp_servers() -> dict:
-    """List all registered MCP servers and their available tools.
+    """List all registered MCP servers.
 
     Returns:
         Dict with server names as keys and their info as values.
@@ -254,8 +254,7 @@ def list_mcp_tools(server_name: str = "") -> dict:
         Dict with tool definitions grouped by server.
     """
     servers = [server_name] if server_name else None
-    tools = _mcp_pool.get_tools_for_servers(servers)
-    return {"tools": tools, "count": len(tools)}
+    return _mcp_pool.get_tools_for_servers(servers)
 
 
 # --- Benchmark ---
