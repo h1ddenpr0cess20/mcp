@@ -153,7 +153,7 @@ Returns hostname, uptime, kernel version, memory usage, and disk usage in one ca
     fetch_file("/home/ai-agent/report.pdf")
     ```
 
-Returns a URL like `http://127.0.0.1:9409/files/<file_id>/content` that the client can open directly.
+Returns a URL like `http://127.0.0.1:9611/files/<file_id>/content` that the client can open directly.
 
 **Sample prompts to an AI assistant:**
 

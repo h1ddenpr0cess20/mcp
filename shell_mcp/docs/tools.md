@@ -192,7 +192,7 @@ Downloads a file from the sandbox and makes it available via a local HTTP URL. U
 | size      | integer | File size in bytes |
 | mime_type | string  | MIME type inferred from the filename, e.g. `"application/pdf"` |
 
-Files are saved to `~/mcp-files/` and served on `http://127.0.0.1:9409/` by default.
+Files are saved to `~/mcp-files/` and served on `http://127.0.0.1:9611/` by default.
 
 ---
 
@@ -225,7 +225,7 @@ Files are saved to `~/mcp-files/` and served on `http://127.0.0.1:9409/` by defa
 ```json
 {
   "file_id": "file_a1b2c3d4e5f67890",
-  "url": "http://127.0.0.1:9409/files/file_a1b2c3d4e5f67890/content",
+  "url": "http://127.0.0.1:9611/files/file_a1b2c3d4e5f67890/content",
   "filename": "report.pdf",
   "size": 204800,
   "mime_type": "application/pdf"

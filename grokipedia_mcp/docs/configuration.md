@@ -92,7 +92,7 @@ To run as a persistent HTTP server, edit the bottom of `server.py`:
 # mcp.run()
 
 # Uncomment the HTTP line:
-mcp.run(transport="http", host="127.0.0.1", port=9101, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9110, path="/mcp")
 ```
 
 Then start the server:
@@ -104,7 +104,7 @@ python server.py
 The server will listen at:
 
 ```
-http://127.0.0.1:9101/mcp
+http://127.0.0.1:9110/mcp
 ```
 
 The server binds to localhost only (`127.0.0.1`), so it is not accessible from other machines on your network unless you change the `host` binding.
@@ -116,10 +116,10 @@ To use SSE transport, edit the bottom of `server.py`:
 ```python
 # Comment out other transports:
 # mcp.run()
-# mcp.run(transport="http", host="127.0.0.1", port=9101, path="/mcp")
+# mcp.run(transport="http", host="127.0.0.1", port=9110, path="/mcp")
 
 # Uncomment the SSE line:
-mcp.run(transport="sse", host="127.0.0.1", port=9101)
+mcp.run(transport="sse", host="127.0.0.1", port=9110)
 ```
 
 Then start the server:
@@ -194,7 +194,7 @@ If you prefer to keep the server running independently:
     {
       "mcpServers": {
         "grokipedia": {
-          "url": "http://127.0.0.1:9101/mcp"
+          "url": "http://127.0.0.1:9110/mcp"
         }
       }
     }
@@ -215,7 +215,7 @@ The server is a standard FastMCP server and works with any MCP-compliant client.
 Any client that supports MCP over HTTP can connect to:
 
 ```
-http://127.0.0.1:9101/mcp
+http://127.0.0.1:9110/mcp
 ```
 
 Refer to your client's documentation for how to register an MCP server URL.
@@ -233,7 +233,7 @@ Any client that supports launching MCP servers as subprocesses needs:
 To use a different port, edit the `port` argument in `server.py`:
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9200, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9112, path="/mcp")
 ```
 
 Then update any client configuration that references the old port number.
@@ -243,7 +243,7 @@ Then update any client configuration that references the old port number.
 By default, the server binds to `127.0.0.1` (localhost only). To make it accessible on your local network, change the host to `0.0.0.0`:
 
 ```python
-mcp.run(transport="http", host="0.0.0.0", port=9101, path="/mcp")
+mcp.run(transport="http", host="0.0.0.0", port=9110, path="/mcp")
 ```
 
 Do not expose the server to the public internet without additional authentication. The server has no built-in access controls.

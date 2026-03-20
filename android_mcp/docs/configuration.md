@@ -136,11 +136,11 @@ The built-in HTTPS file server serves screenshots and other files so MCP clients
 | Variable           | Default                  | Description |
 |--------------------|--------------------------|-------------|
 | `FILE_SERVER_HOST` | `127.0.0.1`              | Bind address |
-| `FILE_SERVER_PORT` | `9410`                   | Port |
+| `FILE_SERVER_PORT` | `9701`                   | Port |
 | `FILES_DIR`        | `~/mcp-files`            | Local directory for served files |
 | `CERT_DIR`         | `~/.android_mcp_certs`   | Directory for auto-generated TLS certs |
 
-Browser-based MCP clients may need to visit `https://127.0.0.1:9410` once in their browser to accept the self-signed certificate before image fetching will work.
+Browser-based MCP clients may need to visit `https://127.0.0.1:9701` once in their browser to accept the self-signed certificate before image fetching will work.
 
 ---
 
@@ -151,10 +151,10 @@ The active transport is set in the `__main__` block of `server.py`.
 ### HTTP (default)
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9402, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9700, path="/mcp")
 ```
 
-Server listens at `http://127.0.0.1:9402/mcp`.
+Server listens at `http://127.0.0.1:9700/mcp`.
 
 ### stdio
 
@@ -165,7 +165,7 @@ mcp.run()
 ### SSE
 
 ```python
-mcp.run(transport="sse", host="127.0.0.1", port=9402)
+mcp.run(transport="sse", host="127.0.0.1", port=9700)
 ```
 
 | Transport | When to use |
@@ -212,7 +212,7 @@ mcp.run(transport="sse", host="127.0.0.1", port=9402)
 2. Point your client at:
 
     ```
-    http://127.0.0.1:9402/mcp
+    http://127.0.0.1:9700/mcp
     ```
 
 ---
@@ -222,19 +222,19 @@ mcp.run(transport="sse", host="127.0.0.1", port=9402)
 Any MCP-compliant client can connect via HTTP:
 
 ```
-http://127.0.0.1:9402/mcp
+http://127.0.0.1:9700/mcp
 ```
 
 To use a different port, edit `server.py`:
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9402, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9702, path="/mcp")
 ```
 
 To accept connections from other machines:
 
 ```python
-mcp.run(transport="http", host="0.0.0.0", port=9402, path="/mcp")
+mcp.run(transport="http", host="0.0.0.0", port=9700, path="/mcp")
 ```
 
 Do not expose the server to the public internet without additional authentication.

@@ -22,7 +22,7 @@ class FileServer:
             files_dir or os.path.expanduser(os.getenv("FILES_DIR", "~/mcp-files"))
         )
         self.host = host if host is not None else os.getenv("FILE_SERVER_HOST", "127.0.0.1")
-        self.port = port if port is not None else int(os.getenv("FILE_SERVER_PORT", "9410"))
+        self.port = port if port is not None else int(os.getenv("FILE_SERVER_PORT", "9701"))
         self.files_dir.mkdir(parents=True, exist_ok=True)
         self._file_map: dict[str, dict] = {}
         self._server: HTTPServer | None = None

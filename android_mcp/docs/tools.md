@@ -515,7 +515,7 @@ Pull a file from the device to the host.
 ```json
 {
   "file_id": "file_a1b2c3d4e5f67890",
-  "url": "https://127.0.0.1:9410/files/file_a1b2c3d4e5f67890/content",
+  "url": "https://127.0.0.1:9701/files/file_a1b2c3d4e5f67890/content",
   "filename": "screenshot_20260320_114500.jpg",
   "size": 77234,
   "mime_type": "image/jpeg"
