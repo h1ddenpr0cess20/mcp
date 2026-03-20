@@ -163,6 +163,19 @@ def list_agents() -> dict:
 
 
 @mcp.tool
+def delete_agent(name: str) -> dict:
+    """Delete a named agent.
+
+    Args:
+        name: Name of the agent to delete.
+
+    Returns:
+        Dict with deleted status.
+    """
+    return {"name": name, "deleted": _agents.delete(name)}
+
+
+@mcp.tool
 def ask_agents_parallel(prompt: str, agent_names: list[str], max_workers: int = 0) -> dict:
     """Send the same prompt to multiple named agents in parallel.
 
