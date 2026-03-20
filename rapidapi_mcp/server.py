@@ -85,7 +85,7 @@ def run_all_servers(*, host: str | None = None) -> None:
             process = mp.Process(
                 target=runner,
                 name=f"{name}-server",
-                kwargs={"host": bound_host, "port": default_port},
+                kwargs={"host": bound_host, "port": default_port, "force_http": True},
             )
             process.start()
             processes.append((name, process))
@@ -134,7 +134,7 @@ def main() -> None:
     server, runner, default_host, default_port = SERVERS[args.domain]
     host = args.host or default_host
     port = args.port or default_port
-    runner(host=host, port=port)
+    runner(host=host, port=port, force_http=True)
 
 
 if __name__ == "__main__":
