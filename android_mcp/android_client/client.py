@@ -12,14 +12,14 @@ class ADBClient:
         self.serial = serial or os.getenv("ADB_SERIAL")
         self.timeout = int(os.getenv("ADB_TIMEOUT", 30))
 
-    def _adb(self, *args) -> dict:
+    def _adb(self, *args, timeout=None) -> dict:
         """Run an adb command and return stdout, stderr, exit_code."""
         cmd = ["adb"]
         if self.serial:
             cmd += ["-s", self.serial]
         cmd += list(args)
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=self.timeout
+            cmd, capture_output=True, text=True, timeout=timeout or self.timeout
         )
         return {
             "stdout": result.stdout.strip(),

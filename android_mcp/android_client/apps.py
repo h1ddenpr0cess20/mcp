@@ -10,7 +10,7 @@ class AppManager:
         if replace:
             args.append("-r")
         args.append(apk_path)
-        return self._adb._adb(*args)
+        return self._adb._adb(*args, timeout=120)
 
     def uninstall_app(self, package: str) -> dict:
         """Uninstall an app by package name."""
