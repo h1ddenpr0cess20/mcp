@@ -10,7 +10,7 @@ pip install -r android_mcp/requirements.txt
 python android_mcp/server.py
 ```
 
-The server runs on HTTP transport at `127.0.0.1:9402` by default. A local HTTPS file server starts automatically on port `9410` for serving screenshots.
+The server runs on HTTP transport at `127.0.0.1:9700` by default. A local HTTPS file server starts automatically on port `9701` for serving screenshots.
 
 ## Prerequisites
 
@@ -54,7 +54,7 @@ Copy `.env.example` to `.env` and fill in values.
 | `ADB_TIMEOUT` | `30` | Command timeout in seconds |
 | `SCREENSHOT_DIR` | `/tmp/android_screenshots` | Local directory for saved screenshots |
 | `FILE_SERVER_HOST` | `127.0.0.1` | HTTPS file server bind address |
-| `FILE_SERVER_PORT` | `9410` | HTTPS file server port |
+| `FILE_SERVER_PORT` | `9701` | HTTPS file server port |
 | `FILES_DIR` | `~/mcp-files` | Local directory for served files |
 | `CERT_DIR` | `~/.android_mcp_certs` | Directory for auto-generated TLS certs |
 
@@ -71,6 +71,6 @@ Copy `.env.example` to `.env` and fill in values.
 
 - For WiFi ADB, first connect via USB and run `adb tcpip 5555`, then set `ADB_HOST` to the device IP.
 - Screenshots are compressed from raw PNG (~4MB) to JPEG (~50-100KB) to keep vision model token usage reasonable.
-- On first run, a self-signed certificate is auto-generated. Browser-based clients may need to visit `https://127.0.0.1:9410` once to accept the cert.
+- On first run, a self-signed certificate is auto-generated. Browser-based clients may need to visit `https://127.0.0.1:9701` once to accept the cert.
 - The `dump_ui` tool is useful for finding element coordinates and resource IDs without needing a vision model.
 - See `server.py` for transport options (stdio, HTTP, SSE).

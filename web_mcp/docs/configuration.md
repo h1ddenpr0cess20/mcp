@@ -122,7 +122,7 @@ python server.py
 ### HTTP (default active)
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9500, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9510, path="/mcp")
 ```
 
 ```bash
@@ -132,13 +132,13 @@ python server.py
 The server listens at:
 
 ```
-http://127.0.0.1:9500/mcp
+http://127.0.0.1:9510/mcp
 ```
 
 ### SSE
 
 ```python
-mcp.run(transport="sse", host="127.0.0.1", port=9500)
+mcp.run(transport="sse", host="127.0.0.1", port=9510)
 ```
 
 | Transport | When to use |
@@ -192,7 +192,7 @@ mcp.run(transport="sse", host="127.0.0.1", port=9500)
     {
       "mcpServers": {
         "web": {
-          "url": "http://127.0.0.1:9500/mcp"
+          "url": "http://127.0.0.1:9510/mcp"
         }
       }
     }
@@ -207,19 +207,19 @@ mcp.run(transport="sse", host="127.0.0.1", port=9500)
 Any MCP-compliant client can connect via HTTP:
 
 ```
-http://127.0.0.1:9500/mcp
+http://127.0.0.1:9510/mcp
 ```
 
 To use a different port, edit `server.py`:
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9600, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9512, path="/mcp")
 ```
 
 To accept connections from other machines on your network:
 
 ```python
-mcp.run(transport="http", host="0.0.0.0", port=9500, path="/mcp")
+mcp.run(transport="http", host="0.0.0.0", port=9510, path="/mcp")
 ```
 
 Do not expose the server to the public internet without additional authentication.

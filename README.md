@@ -57,6 +57,16 @@ FastMCP server for shell execution and file operations over SSH. Optionally auto
 
 **Requirements**: SSH-accessible target, or VirtualBox with `vboxmanage` on PATH
 
+### Subagent MCP (`subagent_mcp/`)
+FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any OpenAI-compatible endpoint.
+- Named agents with persistent system prompts, per-agent model selection, and MCP server access
+- Agentic tool-use loop: agents can use tools from other MCP servers (web search, shell, Android, etc.)
+- Parallel execution across multiple models or agents with auto-calibrated concurrency
+- Multi-turn conversations with history tracking
+- MCP server pool with `.env` pre-registration and runtime management
+
+**Requirements**: OpenAI-compatible endpoint with Responses API support (e.g. LM Studio)
+
 ### RapidAPI MCP (`rapidapi_mcp/`)
 Suite of FastMCP servers wrapping the RapidAPI integrations used in the [Tyumi](http://github.com/h1ddenpr0cess20/Tyumi) project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
 

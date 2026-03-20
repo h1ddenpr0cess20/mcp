@@ -10,7 +10,7 @@ pip install -r shell_mcp/requirements.txt
 python shell_mcp/server.py
 ```
 
-The server runs on HTTP transport at `127.0.0.1:9400` by default.
+The server runs on HTTP transport at `127.0.0.1:9610` by default.
 
 ## Tools
 
@@ -21,7 +21,7 @@ The server runs on HTTP transport at `127.0.0.1:9400` by default.
 - **`upload_file`** — Upload a local file into the sandbox via SFTP.
 - **`download_file`** — Download a file from the sandbox to the local machine via SFTP.
 - **`get_system_info`** — Get hostname, uptime, kernel, memory, and disk usage from the sandbox.
-- **`fetch_file`** — Download a file from the sandbox and serve it via a local HTTP URL (port 9409).
+- **`fetch_file`** — Download a file from the sandbox and serve it via a local HTTP URL (port 9611).
 
 ## Configuration
 
@@ -63,7 +63,7 @@ When `vboxmanage` is on PATH, `VMManager` automatically creates and installs a D
 | Variable | Default | Description |
 |---|---|---|
 | `FILE_SERVER_HOST` | `127.0.0.1` | Bind address |
-| `FILE_SERVER_PORT` | `9409` | Port |
+| `FILE_SERVER_PORT` | `9611` | Port |
 
 Files are stored in `~/mcp-files/`.
 

@@ -156,6 +156,6 @@ def fetch_file(remote_path: str) -> dict:
 if __name__ == "__main__":
     import sys
     if sys.stdin.isatty():
-        mcp.run(transport="http", host="127.0.0.1", port=9400, path="/mcp")
+        mcp.run(transport="http", host="127.0.0.1", port=9610, path="/mcp")
     else:
         mcp.run()
