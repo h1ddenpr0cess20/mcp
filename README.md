@@ -75,6 +75,17 @@ Combined FastMCP server: sandboxed shell execution + web search and fetching, al
 
 **Requirements**: VirtualBox with `vboxmanage` on PATH, or an SSH target with SearXNG already running
 
+### Fire TV MCP (`firetv_mcp/`)
+FastMCP server for controlling Amazon Fire TV devices via ADB over WiFi.
+- D-pad navigation, media playback control, volume, now-playing info
+- App management with 30+ friendly aliases (netflix, prime, disney+, etc.), deep linking, sideloading
+- Content search, open settings sections directly
+- Screenshot capture served via HTTPS, screen recording, UI hierarchy dump
+- Device info, network info, storage, brightness, bluetooth, reboot
+- Auto-discovers Fire TV on the network if no IP is configured
+
+**Requirements**: `adb` and `openssl` on PATH, ADB debugging enabled on Fire TV
+
 ### RapidAPI MCP (`rapidapi_mcp/`)
 Suite of FastMCP servers wrapping the RapidAPI integrations used in the [Tyumi](http://github.com/h1ddenpr0cess20/Tyumi) project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
 
