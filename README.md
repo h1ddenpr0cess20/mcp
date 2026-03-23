@@ -67,6 +67,14 @@ FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any
 
 **Requirements**: OpenAI-compatible endpoint with Responses API support (e.g. LM Studio)
 
+### WebShell MCP (`webshell_mcp/`)
+Combined FastMCP server: sandboxed shell execution + web search and fetching, all in one VM. SearXNG runs inside the VM as a systemd service.
+- All shell tools: execute commands, read/write files, upload/download via SFTP, system info, file serving
+- All web tools: SearXNG web/news search, URL fetch with content extraction
+- Auto-provisions a dedicated VM (`ai-webshell`) with SearXNG installed and running on first launch
+
+**Requirements**: VirtualBox with `vboxmanage` on PATH, or an SSH target with SearXNG already running
+
 ### RapidAPI MCP (`rapidapi_mcp/`)
 Suite of FastMCP servers wrapping the RapidAPI integrations used in the [Tyumi](http://github.com/h1ddenpr0cess20/Tyumi) project. Each domain (jobs, finance, food, entertainment, social, real estate, news, search) runs as a separate FastMCP instance.
 
