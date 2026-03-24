@@ -18,7 +18,7 @@ class ShellClient:
         self.key_path = os.getenv("SSH_KEY_PATH")
         self.password = os.getenv("SSH_PASSWORD")
         self.timeout = int(os.getenv("SSH_TIMEOUT", "10"))
-        self.command_timeout = int(os.getenv("COMMAND_TIMEOUT", "30"))
+        self.command_timeout = int(os.getenv("COMMAND_TIMEOUT", "1200"))
         self._client: paramiko.SSHClient | None = None
 
     def connect(self):
