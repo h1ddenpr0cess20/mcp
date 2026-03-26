@@ -10,9 +10,6 @@ from curl_cffi import requests
 from markdownify import markdownify
 from playwright.sync_api import sync_playwright
 
-# Minimum content length before falling back to JS rendering
-_JS_FALLBACK_THRESHOLD = 512
-
 
 class FetchClient:
     """Fetch URLs and extract readable content."""
@@ -50,22 +47,6 @@ class FetchClient:
                 content = markdownify(html, strip=["img", "script", "style"])
         return {"url": url, "title": title, "content": content}
 
-    def _fetch_with_playwright(self, url: str) -> str:
-        """Render page with a headless browser and return the HTML."""
-        timeout_ms = int(self.timeout * 1000)
-        proxy = self._pick_proxy()
-        launch_kwargs = {"headless": True}
-        if proxy:
-            launch_kwargs["proxy"] = {"server": proxy}
-        with sync_playwright() as p:
-            browser = p.chromium.launch(**launch_kwargs)
-            try:
-                page = browser.new_page()
-                page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-                return page.content()
-            finally:
-                browser.close()
-
     def fetch(
         self,
         url: str,
@@ -73,11 +54,7 @@ class FetchClient:
         output_format: str = "markdown",
         include_links: bool = True,
     ) -> Dict[str, str]:
-        """Fetch a URL and extract its content.
-
-        Tries a fast curl-based request first; falls back to a headless
-        Playwright browser if the response looks like a JS-rendered page
-        (content below threshold).
+        """Fetch a URL and extract its content using curl.
 
         Args:
             url: The URL to fetch.
@@ -98,15 +75,37 @@ class FetchClient:
         resp.raise_for_status()
         html = resp.text
 
-        result = self._extract(html, url, output_format, include_links)
+        return self._extract(html, url, output_format, include_links)
 
-        if len(result["content"]) < _JS_FALLBACK_THRESHOLD:
+    def scrape(
+        self,
+        url: str,
+        *,
+        output_format: str = "markdown",
+        include_links: bool = True,
+    ) -> Dict[str, str]:
+        """Scrape a URL using a headless Playwright browser.
+
+        Args:
+            url: The URL to scrape.
+            output_format: "markdown", "text", or "html".
+            include_links: Whether to include links in extracted content.
+
+        Returns:
+            Dict with keys: url, title, content.
+        """
+        timeout_ms = int(self.timeout * 1000)
+        proxy = self._pick_proxy()
+        launch_kwargs = {"headless": True}
+        if proxy:
+            launch_kwargs["proxy"] = {"server": proxy}
+        with sync_playwright() as p:
+            browser = p.chromium.launch(**launch_kwargs)
             try:
-                js_html = self._fetch_with_playwright(url)
-                js_result = self._extract(js_html, url, output_format, include_links)
-                if len(js_result["content"]) > len(result["content"]):
-                    return js_result
-            except Exception:
-                pass
+                page = browser.new_page()
+                page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+                html = page.content()
+            finally:
+                browser.close()
 
-        return result
+        return self._extract(html, url, output_format, include_links)

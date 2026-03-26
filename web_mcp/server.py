@@ -105,6 +105,33 @@ def fetch_url(
     )
 
 
+@mcp.tool
+def scrape_url(
+    url: str,
+    output_format: str = "markdown",
+    include_links: bool = True,
+):
+    """Scrape a URL using a headless Playwright browser.
+
+    Use this when fetch_url returns empty or broken content — typically for
+    JavaScript-rendered pages (SPAs, dashboards, dynamically loaded content).
+    This is slower than fetch_url but handles JS-heavy sites that curl cannot render.
+
+    Args:
+        url: The URL to scrape.
+        output_format: "markdown" (default), "text", or "html".
+        include_links: Whether to include links in extracted content.
+
+    Returns:
+        Dict with url, title, and content.
+    """
+    return _fetch.scrape(
+        url,
+        output_format=output_format,
+        include_links=include_links,
+    )
+
+
 if __name__ == "__main__":
     import sys
     if sys.stdin.isatty():
