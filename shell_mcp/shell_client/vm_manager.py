@@ -690,8 +690,9 @@ class VMManager:
 
         Returns dict with ssh_host and ssh_port to use for connections.
         """
-        if not shutil.which("vboxmanage"):
-            self._log("VirtualBox not found — assuming external SSH target")
+        use_vm = os.getenv("USE_VM", "true").lower() not in ("0", "false", "no")
+        if not use_vm or not shutil.which("vboxmanage"):
+            self._log("Skipping VM — connecting directly to SSH target")
             return {"ssh_host": self.ssh_host, "ssh_port": self.ssh_port}
 
         state = self.vm_state() if self.vm_exists() else "not_found"
