@@ -334,6 +334,9 @@ class VMManager:
             f"usermod -aG vboxsf {self.vm_user} || true",
             "mkdir -p /etc/pip.conf.d",
             "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
+            # Ensure pip3 is available — apt install may have silently failed
+            "command -v pip3 || apt-get install -y python3-pip || "
+            "(curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && python3 /tmp/get-pip.py) || true",
             # --- Web fetch dependencies ---
             "pip3 install -q curl_cffi trafilatura markdownify playwright || true",
             "python3 -m playwright install --with-deps chromium || true",

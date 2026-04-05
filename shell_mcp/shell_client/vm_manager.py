@@ -343,6 +343,9 @@ class VMManager:
             # Allow pip install without --break-system-packages (PEP 668)
             "mkdir -p /etc/pip.conf.d",
             "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
+            # Ensure pip3 is available — apt install may have silently failed
+            "command -v pip3 || apt-get install -y python3-pip || "
+            "(curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && python3 /tmp/get-pip.py) || true",
             # --- Document / office Python libraries ---
             "pip3 install -q python-docx pdfplumber pypdf reportlab weasyprint "
             "openpyxl pandas xlrd csvkit python-pptx beautifulsoup4 lxml "
