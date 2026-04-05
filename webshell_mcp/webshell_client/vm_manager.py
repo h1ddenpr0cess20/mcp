@@ -260,25 +260,57 @@ class VMManager:
         script_path = os.path.join(vm_dir, "vbox-setup.sh")
 
         packages = " ".join([
+            # editors / shell
             "vim", "nano", "tmux", "screen",
+            # core utils
+            "curl", "wget",
             "jq", "tree", "pv", "bc", "watch", "file", "less", "rsync",
             "unzip", "zip", "p7zip-full", "xz-utils", "tar",
+            "patch", "diffutils", "colordiff",
+            "moreutils", "gawk", "parallel",
+            # interactive / scripting
+            "expect", "entr",
+            # modern shell tools
+            "fzf", "bat", "ripgrep", "fd-find", "silversearcher-ag",
+            # network
             "net-tools", "nmap", "netcat-openbsd", "socat",
             "dnsutils", "traceroute", "iputils-ping",
-            "ripgrep", "fd-find", "silversearcher-ag",
+            "tcpdump", "whois",
+            # web / text browsers
+            "w3m", "html2text",
+            # monitoring / debug
             "htop", "iotop", "lsof", "strace", "sysstat", "procps",
+            "xxd", "binutils",
+            # build
             "build-essential", "cmake", "pkg-config", "autoconf", "automake",
+            "clang",
             "python3", "python3-pip", "python3-venv", "python3-dev",
             "nodejs", "npm",
             "golang-go",
+            "rustc", "cargo",
             "ruby", "ruby-dev",
-            "default-jre",
+            "default-jre", "default-jdk",
+            "php-cli", "lua5.4",
+            "git", "git-lfs",
+            "maven", "gradle",
+            # data / db
             "sqlite3", "postgresql-client", "mariadb-client", "redis-tools",
+            # media
             "ffmpeg", "imagemagick",
+            # document / conversion
             "pandoc", "man-db",
+            "poppler-utils", "wkhtmltopdf",
+            "libreoffice", "ghostscript", "qpdf",
+            "tesseract-ocr", "unoconv", "calibre", "miller",
+            # graph / diagram rendering
+            "graphviz",
+            # crypto / certs
             "gnupg", "openssl",
+            # infra / containers
+            "podman", "ansible",
+            # scheduler
             "cron",
-            "git-lfs",
+            # firewall
             "ufw",
         ])
 
@@ -305,6 +337,36 @@ class VMManager:
             # --- Web fetch dependencies ---
             "pip3 install -q curl_cffi trafilatura markdownify playwright || true",
             "python3 -m playwright install --with-deps chromium || true",
+            # --- Document / office Python libraries ---
+            "pip3 install -q python-docx pdfplumber pypdf reportlab weasyprint "
+            "openpyxl pandas xlrd csvkit python-pptx beautifulsoup4 lxml "
+            "pillow cairosvg ebooklib pytesseract pdf2image || true",
+            # --- HTTP / network ---
+            "pip3 install -q requests httpx aiohttp paramiko fabric || true",
+            # --- CLI / output ---
+            "pip3 install -q click rich typer tqdm loguru || true",
+            # --- Data / config ---
+            "pip3 install -q pydantic pyyaml toml python-dotenv jinja2 "
+            "arrow pendulum humanize tabulate orjson msgpack "
+            "chardet python-magic dateparser rapidfuzz || true",
+            # --- Scheduling / task queues ---
+            "pip3 install -q tenacity schedule celery || true",
+            # --- Databases ---
+            "pip3 install -q redis psycopg2-binary pymysql pymongo sqlalchemy alembic || true",
+            # --- Data science ---
+            "pip3 install -q numpy scipy matplotlib seaborn plotly scikit-learn || true",
+            # --- NLP / AI ---
+            "pip3 install -q nltk tiktoken anthropic openai || true",
+            # --- Web / API serving ---
+            "pip3 install -q fastapi uvicorn || true",
+            # --- Security ---
+            "pip3 install -q cryptography || true",
+            # --- Dev tools ---
+            "pip3 install -q psutil gitpython pygments black ruff mypy "
+            "pytest hypothesis watchdog || true",
+            # --- Cloud / infra SDKs ---
+            "pip3 install -q docker kubernetes boto3 "
+            "google-cloud-storage azure-storage-blob || true",
             # --- SearXNG installation ---
             "git clone --depth 1 https://github.com/searxng/searxng.git /opt/searxng || true",
             "pip3 install -q setuptools wheel || true",
