@@ -167,7 +167,7 @@ class TestOpenSettings:
         apps.open_settings("network")
 
         args = mock_run.call_args[0][0]
-        assert "WifiSettingsActivity" in args[2]
+        assert "NetworkActivity" in args[2]
 
     def test_open_settings_case_insensitive(self, mock_subprocess_run, monkeypatch):
         mock_run, mock_result = mock_subprocess_run
@@ -178,7 +178,7 @@ class TestOpenSettings:
         apps.open_settings("AUDIO")
 
         args = mock_run.call_args[0][0]
-        assert "AudioActivity" in args[2]
+        assert "DisplayAndSoundsActivity" in args[2]
 
 
 class TestClearAppData:
