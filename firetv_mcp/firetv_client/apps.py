@@ -45,9 +45,9 @@ DEFAULT_APP_ALIASES = {
 }
 
 _SETTINGS_SECTIONS = {
-    "network": "com.amazon.tv.settings.v2/.tv.network.WifiSettingsActivity",
+    "network": "com.amazon.tv.settings.v2/.tv.network.NetworkActivity",
     "display": "com.amazon.tv.settings.v2/.tv.display_sounds.DisplayAndSoundsActivity",
-    "audio": "com.amazon.tv.settings.v2/.tv.display_sounds.AudioActivity",
+    "audio": "com.amazon.tv.settings.v2/.tv.display_sounds.DisplayAndSoundsActivity",
     "controllers": "com.amazon.tv.settings.v2/.tv.controllers_bluetooth_devices.ControllersAndBluetoothActivity",
     "bluetooth": "com.amazon.tv.settings.v2/.tv.controllers_bluetooth_devices.ControllersAndBluetoothActivity",
     "apps": "com.amazon.tv.settings.v2/.tv.applications.ApplicationsActivity",
@@ -160,5 +160,5 @@ class AppManager:
                 f"am start -n {_SETTINGS_SECTIONS[section.lower()]}"
             )
         return self._adb.shell(
-            "am start -n com.amazon.tv.settings.v2/.tv.MainSettingsActivity"
+            "am start -n com.amazon.tv.settings.v2/.tv.device.DeviceActivity"
         )
