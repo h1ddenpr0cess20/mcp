@@ -30,10 +30,18 @@ class ADBClient:
             return {"stdout": "", "stderr": "adb command timed out", "exit_code": 1}
 
     def connect(self) -> dict:
-        """Connect to a device over WiFi ADB. Auto-discovers if no host is set."""
+        """Connect to a device over WiFi ADB.
+
+        If no host is configured, returns without scanning the network — use
+        ``_autodiscover`` (exposed via the ``discover_device`` tool) to search.
+        """
         if self.host:
             return self._adb("connect", f"{self.host}:{self.port}")
-        return self._autodiscover()
+        return {
+            "stdout": "no host configured — set FIRETV_HOST or run discover_device",
+            "stderr": "",
+            "exit_code": 0,
+        }
 
     def _autodiscover(self) -> dict:
         """Try to find and connect to a Fire TV via mDNS, then network scan."""

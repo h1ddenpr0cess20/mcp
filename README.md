@@ -15,6 +15,14 @@ FastMCP server exposing the entire Last.fm API as MCP tools. Categories include:
 
 **Requirements**: Last.fm API key (free from https://www.last.fm/api)
 
+### Grokipedia MCP (`grokipedia_mcp/`)
+FastMCP server for scraping and structuring content from Grokipedia pages.
+
+**Features**:
+- Scrape page content into structured sections with headings and text blocks
+- Web scraping using BeautifulSoup
+- Clean separation between scraping logic and MCP server
+
 ### Yahoo Finance MCP (`yfinance_mcp/`)
 FastMCP server exposing Yahoo Finance data as MCP tools. No API key required.
 - Real-time quotes, market summary, market status
@@ -98,8 +106,8 @@ package_name/
 
 ## Running Servers
 ```bash
-# Example for an MCP server
-cd server_directory
+# Example for Grokipedia MCP
+cd grokipedia_mcp
 python -m venv .venv && source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python server.py  # Launches MCP server for client integration
