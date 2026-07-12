@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional, Tuple
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
 
 
 class GrokipediaScraper:
@@ -11,7 +11,8 @@ class GrokipediaScraper:
 
     @staticmethod
     def _build_url(page_title: str) -> str:
-        return f"https://grokipedia.com/page/{page_title.replace(' ', '_')}"
+        slug = quote(page_title.replace(" ", "_"), safe="")
+        return f"https://grokipedia.com/page/{slug}"
 
     def _fetch_soup(
         self,
@@ -94,7 +95,8 @@ class GrokipediaScraper:
         for aside in content_root.find_all("aside"):
             aside.decompose()
 
-        allowed = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "ul", "ol", "li"]
+        headings = ["h1", "h2", "h3", "h4", "h5", "h6"]
+        allowed = [*headings, "p", "span", "li"]
         elements = list(content_root.find_all(allowed, recursive=True))
 
         def start_section(
@@ -129,6 +131,12 @@ class GrokipediaScraper:
                 continue
 
             if name in ("p", "span"):
+                # A parent paragraph/list item already includes the text of
+                # inline descendants. Processing those descendants separately
+                # duplicates content in the structured response.
+                duplicate_parents = ["li"] if name == "p" else ["p", "li", "span", *headings]
+                if el.find_parent(duplicate_parents):
+                    continue
                 push_block(current, el.get_text(separator=" ", strip=True))
                 continue
 
@@ -156,7 +164,7 @@ class GrokipediaScraper:
             dict with keys: query, page, results (list of dicts with
             title, slug, snippet), total_pages.
         """
-        url = f"https://grokipedia.com/search?q={query}&page={page}"
+        url = f"https://grokipedia.com/search?{urlencode({'q': query, 'page': page})}"
         try:
             response = requests.get(url, timeout=30)
             response.raise_for_status()
@@ -180,16 +188,17 @@ class GrokipediaScraper:
                         "title": title,
                         "slug": slug,
                         "snippet": snippet,
-                        "url": f"https://grokipedia.com/page/{slug}",
+                        "url": f"https://grokipedia.com/page/{quote(slug, safe='')}",
                     })
 
             # Extract total pages from pagination links
             total_pages = page
             for a in soup.find_all("a", href=True):
                 href = a["href"]
-                if f"q={query}" in href and "&page=" in href:
+                params = parse_qs(urlparse(href).query)
+                if params.get("q") == [query] and "page" in params:
                     try:
-                        p = int(href.split("&page=")[-1])
+                        p = int(params["page"][-1])
                         if p > total_pages:
                             total_pages = p
                     except ValueError:

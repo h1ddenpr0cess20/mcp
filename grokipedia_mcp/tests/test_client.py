@@ -154,6 +154,32 @@ class TestGrokipediaScraper:
             assert "Test_Page" in url
             assert "https://grokipedia.com/page/Test_Page" == url
 
+    def test_url_formatting_encodes_reserved_characters(self):
+        scraper = GrokipediaScraper()
+
+        assert scraper._build_url("C++ / C#") == (
+            "https://grokipedia.com/page/C%2B%2B_%2F_C%23"
+        )
+
+    def test_nested_inline_elements_are_not_duplicated(self):
+        html = """
+        <article>
+            <h1>Test</h1>
+            <p>Hello <span>world</span>.</p>
+            <ul><li><span>One</span></li></ul>
+        </article>
+        """
+
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = html
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            sections = GrokipediaScraper().scrape_sections("Test")
+
+        assert sections[0]["blocks"] == ["Hello world .", "• One"]
+
     def test_search_success(self, sample_search_html):
         """Test successful search with results and pagination."""
         with patch("grokipedia_client.client.requests.get") as mock_get:
@@ -210,6 +236,22 @@ class TestGrokipediaScraper:
                 "https://grokipedia.com/search?q=python&page=3",
                 timeout=30,
             )
+
+    def test_search_encodes_query_and_parses_encoded_pagination(self):
+        html = '<a href="/search?q=C%2B%2B+%26+Rust&page=4">4</a>'
+        with patch("grokipedia_client.client.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.text = html
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            result = GrokipediaScraper().search("C++ & Rust")
+
+        mock_get.assert_called_once_with(
+            "https://grokipedia.com/search?q=C%2B%2B+%26+Rust&page=1",
+            timeout=30,
+        )
+        assert result["total_pages"] == 4
 
     def test_search_http_error(self):
         """Test search error handling."""
