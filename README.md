@@ -129,3 +129,4 @@ See individual server READMEs for specific setup instructions and configuration.
 - Clean architecture with separation of concerns
 - Python 3.9+ required
 - Each server can be used as a standalone package
+- Pull requests and pushes to `main` test each packaged MCP server independently in GitHub Actions
