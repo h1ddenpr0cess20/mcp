@@ -57,6 +57,15 @@ FastMCP server for shell execution and file operations over SSH. Optionally auto
 
 **Requirements**: SSH-accessible target, or VirtualBox with `vboxmanage` on PATH
 
+### Docker Shell MCP (`docker_shell_mcp/`)
+Docker-backed version of Shell MCP with the same command and file tools, using
+an auto-managed Ubuntu container instead of SSH or VirtualBox.
+- Persistent named workspace volume with configurable CPU, memory, PID, user, and network settings
+- Auto-builds the sandbox image on first launch and reuses the container later
+- Copies files through the Docker CLI and serves generated files over local HTTP
+
+**Requirements**: Docker CLI and a running Docker daemon
+
 ### Subagent MCP (`subagent_mcp/`)
 FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any OpenAI-compatible endpoint.
 - Named agents with persistent system prompts, per-agent model selection, and MCP server access
