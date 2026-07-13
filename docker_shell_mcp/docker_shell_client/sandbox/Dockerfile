@@ -16,8 +16,15 @@ RUN apt-get update \
         rsync ruby-full rustc cargo shellcheck socat sqlite3 strace sysstat tar \
         tcpdump tesseract-ocr tmux traceroute tree unzip vim wget whois xz-utils \
         zip \
-    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
+    && NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json \
+        | jq -r '[.[] | select(.lts and (.version | startswith("v24.")))][0].version')" \
+    && case "$(uname -m)" in x86_64) NODE_ARCH=x64 ;; aarch64) NODE_ARCH=arm64 ;; *) exit 1 ;; esac \
+    && NODE_TARBALL="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+    && curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/${NODE_TARBALL}" \
+    && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" \
+        | grep " ${NODE_TARBALL}\$" | sha256sum -c - \
+    && tar -xJf "${NODE_TARBALL}" -C /usr/local --strip-components=1 --no-same-owner \
+    && rm "${NODE_TARBALL}" \
     && python3 -m venv /opt/agent-venv \
     && /opt/agent-venv/bin/pip install --no-cache-dir \
         aiohttp beautifulsoup4 black chardet click cryptography csvkit dateparser \
