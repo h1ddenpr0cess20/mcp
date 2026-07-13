@@ -1,9 +1,12 @@
+import hashlib
 import os
 import shlex
 import subprocess
 import sys
 import threading
 from pathlib import Path
+
+DOCKERFILE_HASH_LABEL = "shell-mcp.dockerfile-sha256"
 
 
 class ContainerManager:
@@ -70,16 +73,42 @@ class ContainerManager:
     def image_exists(self) -> bool:
         return self._docker("image", "inspect", self.image, check=False).returncode == 0
 
-    def ensure_image(self):
-        if self.image_exists():
-            return
-        self._log(f"Building sandbox image {self.image} (first run; this can take a few minutes)")
-        self.build_image()
+    def dockerfile_hash(self) -> str:
+        dockerfile = self.dockerfile_dir / "Dockerfile"
+        return hashlib.sha256(dockerfile.read_bytes()).hexdigest()
+
+    def image_is_stale(self) -> bool:
+        """True when the image was built from a different Dockerfile than the current one."""
+        result = self._docker(
+            "image", "inspect", "--format",
+            f'{{{{index .Config.Labels "{DOCKERFILE_HASH_LABEL}"}}}}',
+            self.image, check=False,
+        )
+        if result.returncode != 0:
+            return False
+        return result.stdout.strip() != self.dockerfile_hash()
+
+    def ensure_image(self) -> bool:
+        """Build the image if missing or stale. Returns True when a build ran."""
+        if not self.image_exists():
+            self._log(f"Building sandbox image {self.image} (first run; this can take a few minutes)")
+            self.build_image()
+            return True
+        if self.image_is_stale():
+            self._log(f"Dockerfile changed; rebuilding sandbox image {self.image}")
+            self.build_image()
+            return True
+        return False
 
     def build_image(self):
         """Build the sandbox image, streaming progress to stderr."""
         process = subprocess.Popen(
-            [*self.docker_command, "build", "--tag", self.image, str(self.dockerfile_dir)],
+            [
+                *self.docker_command, "build",
+                "--tag", self.image,
+                "--label", f"{DOCKERFILE_HASH_LABEL}={self.dockerfile_hash()}",
+                str(self.dockerfile_dir),
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -123,13 +152,17 @@ class ContainerManager:
         self._docker(*args)
 
     def ensure_running(self):
-        """Build the default image if needed and start or create the container."""
+        """Build or refresh the image if needed and start or create the container."""
         self._docker("version", check=True)
+        rebuilt = self.ensure_image()
         state = self.container_state()
+        if rebuilt and state != "not_found":
+            self._log(f"Recreating container {self.container_name} on the new image")
+            self._docker("rm", "--force", self.container_name)
+            state = "not_found"
         if state == "running":
             return
         if state == "not_found":
-            self.ensure_image()
             self.create_container()
             return
         self._log(f"Starting existing container {self.container_name}")

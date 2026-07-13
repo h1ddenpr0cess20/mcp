@@ -13,7 +13,8 @@ def completed(code=0, stdout="", stderr=""):
 def test_ensure_running_reuses_running_container(monkeypatch):
     monkeypatch.setenv("DOCKER_CONTAINER", "test-sandbox")
     manager = ContainerManager()
-    with patch.object(manager, "_docker", side_effect=[completed(), completed(stdout="running\n")]) as docker:
+    with patch.object(manager, "ensure_image", return_value=False), \
+            patch.object(manager, "_docker", side_effect=[completed(), completed(stdout="running\n")]) as docker:
         manager.ensure_running()
     assert docker.call_count == 2
 
@@ -30,7 +31,8 @@ def test_docker_command_can_be_overridden(monkeypatch):
 
 def test_ensure_running_starts_stopped_container():
     manager = ContainerManager()
-    with patch.object(manager, "_docker", side_effect=[completed(), completed(stdout="exited\n"), completed()]) as docker:
+    with patch.object(manager, "ensure_image", return_value=False), \
+            patch.object(manager, "_docker", side_effect=[completed(), completed(stdout="exited\n"), completed()]) as docker:
         manager.ensure_running()
     assert docker.call_args_list[-1].args == ("start", manager.container_name)
 
@@ -44,6 +46,28 @@ def test_ensure_running_builds_and_creates_missing_container():
     build.assert_called_once()
     commands = [call.args for call in docker.call_args_list]
     assert any(command[:2] == ("run", "--detach") for command in commands)
+
+
+def test_ensure_running_recreates_container_after_rebuild():
+    manager = ContainerManager()
+    with patch.object(manager, "image_exists", return_value=True), \
+            patch.object(manager, "image_is_stale", return_value=True), \
+            patch.object(manager, "build_image"), \
+            patch.object(manager, "_docker", side_effect=[
+                completed(), completed(stdout="running\n"), completed(), completed()
+            ]) as docker:
+        manager.ensure_running()
+    commands = [call.args for call in docker.call_args_list]
+    assert ("rm", "--force", manager.container_name) in commands
+    assert any(command[:2] == ("run", "--detach") for command in commands)
+
+
+def test_image_is_stale_compares_dockerfile_hash():
+    manager = ContainerManager()
+    with patch.object(manager, "_docker", return_value=completed(stdout="deadbeef\n")):
+        assert manager.image_is_stale()
+    with patch.object(manager, "_docker", return_value=completed(stdout=f"{manager.dockerfile_hash()}\n")):
+        assert not manager.image_is_stale()
 
 
 def test_exec_uses_argv_and_interactive_stdin():
