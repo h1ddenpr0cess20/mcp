@@ -1,4 +1,12 @@
+FROM node:24-slim AS node
+
 FROM ubuntu:24.04
+
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/opt/agent-venv/bin:${PATH}"
@@ -16,15 +24,6 @@ RUN apt-get update \
         rsync ruby-full rustc cargo shellcheck socat sqlite3 strace sysstat tar \
         tcpdump tesseract-ocr tmux traceroute tree unzip vim wget whois xz-utils \
         zip \
-    && NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json \
-        | jq -r '[.[] | select(.lts and (.version | startswith("v24.")))][0].version')" \
-    && case "$(uname -m)" in x86_64) NODE_ARCH=x64 ;; aarch64) NODE_ARCH=arm64 ;; *) exit 1 ;; esac \
-    && NODE_TARBALL="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
-    && curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/${NODE_TARBALL}" \
-    && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" \
-        | grep " ${NODE_TARBALL}\$" | sha256sum -c - \
-    && tar -xJf "${NODE_TARBALL}" -C /usr/local --strip-components=1 --no-same-owner \
-    && rm "${NODE_TARBALL}" \
     && python3 -m venv /opt/agent-venv \
     && /opt/agent-venv/bin/pip install --no-cache-dir \
         aiohttp beautifulsoup4 black chardet click cryptography csvkit dateparser \
