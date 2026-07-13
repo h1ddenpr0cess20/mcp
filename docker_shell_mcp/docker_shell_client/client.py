@@ -1,6 +1,7 @@
 import os
 import posixpath
 import shlex
+import subprocess
 
 from .container_manager import ContainerManager
 
@@ -14,9 +15,16 @@ class DockerShellClient:
     def execute(self, command: str) -> dict:
         """Execute a Bash command and return stdout, stderr, and exit code."""
         timeout = self.manager.command_timeout
-        result = self.manager.exec(
-            ["timeout", "--signal=KILL", f"{timeout}s", "bash", "-lc", command]
-        )
+        try:
+            result = self.manager.exec(
+                ["timeout", "--signal=KILL", f"{timeout}s", "bash", "-lc", command]
+            )
+        except subprocess.TimeoutExpired:
+            return {
+                "stdout": "",
+                "stderr": f"Command timed out after {timeout} seconds",
+                "exit_code": 124,
+            }
         return {
             "stdout": result.stdout,
             "stderr": result.stderr,
@@ -24,8 +32,10 @@ class DockerShellClient:
         }
 
     def _home(self) -> str:
-        result = self.manager.exec(["bash", "-lc", 'printf %s "$HOME"'], check=True)
-        return result.stdout
+        # printenv rather than a login shell: profile scripts could write to
+        # stdout and contaminate the result.
+        result = self.manager.exec(["printenv", "HOME"], check=True)
+        return result.stdout.rstrip("\n")
 
     def _resolve_path(self, path: str) -> str:
         if path == "~":
@@ -55,6 +65,8 @@ class DockerShellClient:
         fields = result.stdout.split("\0")
         if fields and fields[-1] == "":
             fields.pop()
+        if len(fields) % 5 != 0:
+            raise RuntimeError(f"Unexpected directory listing output for {path}")
         entries = []
         for index in range(0, len(fields), 5):
             name, size, file_type, permissions, modified = fields[index:index + 5]

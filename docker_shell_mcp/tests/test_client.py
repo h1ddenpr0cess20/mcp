@@ -1,6 +1,8 @@
 import subprocess
 from unittest.mock import MagicMock
 
+import pytest
+
 from docker_shell_client import DockerShellClient
 
 
@@ -36,7 +38,23 @@ def test_list_remote_parses_find_records():
 
 def test_tilde_path_uses_container_home():
     manager = MagicMock(command_timeout=30)
-    manager.exec.side_effect = [result(stdout="/root"), result(stdout="content")]
+    manager.exec.side_effect = [result(stdout="/root\n"), result(stdout="content")]
     content = DockerShellClient(manager).read_remote("~/note.txt")
     assert content == "content"
+    assert manager.exec.call_args_list[0].args[0] == ["printenv", "HOME"]
     assert manager.exec.call_args_list[-1].args[0] == ["cat", "--", "/root/note.txt"]
+
+
+def test_execute_returns_timeout_result():
+    manager = MagicMock(command_timeout=30)
+    manager.exec.side_effect = subprocess.TimeoutExpired(["docker"], 35)
+    outcome = DockerShellClient(manager).execute("sleep 100")
+    assert outcome["exit_code"] == 124
+    assert "timed out" in outcome["stderr"]
+
+
+def test_list_remote_rejects_malformed_records():
+    manager = MagicMock(command_timeout=30)
+    manager.exec.return_value = result(stdout="a.txt\x0012\x00f\x00")
+    with pytest.raises(RuntimeError, match="Unexpected directory listing"):
+        DockerShellClient(manager).list_remote("/workspace")

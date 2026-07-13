@@ -45,7 +45,8 @@ class FileServer:
                         body = handle.read()
                     self.send_response(200)
                     self.send_header("Content-Type", entry["mime_type"])
-                    self.send_header("Content-Disposition", f'attachment; filename="{entry["filename"]}"')
+                    safe_name = entry["filename"].replace("\\", "_").replace('"', "_")
+                    self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
                 elif path.startswith("files/"):
                     file_id = path[len("files/"):]
                     entry = file_map.get(file_id)

@@ -9,6 +9,9 @@ dependencies = [
     "beautifulsoup4>=4.11.0"
 ]
 
+[tool.setuptools.packages.find]
+include = ["grokipedia_client*"]
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q --strict-markers --strict-config"

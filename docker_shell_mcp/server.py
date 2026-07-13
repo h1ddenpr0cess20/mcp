@@ -11,7 +11,6 @@ from docker_shell_client import ContainerManager, DockerShellClient, FileServer
 load_dotenv()
 
 _manager = ContainerManager()
-_manager.ensure_running()
 _client = DockerShellClient(_manager)
 _file_server = FileServer()
 _file_server.start()
@@ -124,7 +123,11 @@ def fetch_file(remote_path: str) -> dict:
         File metadata and download URL.
     """
     filename = os.path.basename(remote_path)
-    local_path = str(_file_server.files_dir / filename)
+    # Namespace by remote path so files with the same basename don't clobber
+    # each other in files_dir.
+    subdir = _file_server.files_dir / _file_server.make_file_id(remote_path)
+    subdir.mkdir(parents=True, exist_ok=True)
+    local_path = str(subdir / filename)
     result = _client.download(remote_path, local_path)
     return _file_server.register(local_path, filename, result["size"])
 

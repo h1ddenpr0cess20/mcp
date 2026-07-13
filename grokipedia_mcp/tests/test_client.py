@@ -144,10 +144,8 @@ class TestGrokipediaScraper:
         # Test spaces converted to underscores
         with patch("grokipedia_client.client.requests.get") as mock_get:
             mock_get.side_effect = Exception("Expected error")
-            try:
+            with pytest.raises(Exception, match="Expected error"):
                 scraper.scrape_sections("Test Page")
-            except:
-                pass
 
             mock_get.assert_called_once()
             url = mock_get.call_args[0][0]
