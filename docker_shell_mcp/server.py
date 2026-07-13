@@ -14,6 +14,7 @@ _manager = ContainerManager()
 _client = DockerShellClient(_manager)
 _file_server = FileServer()
 _file_server.start()
+_manager.start_background_setup()
 atexit.register(_manager.stop_container)
 
 

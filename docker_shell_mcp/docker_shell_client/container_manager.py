@@ -2,6 +2,7 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 
@@ -27,6 +28,10 @@ class ContainerManager:
         )
         self.command_timeout = int(os.getenv("COMMAND_TIMEOUT", "1200"))
         self.dockerfile_dir = Path(__file__).resolve().parent / "sandbox"
+        self._setup_lock = threading.Lock()
+        self._setup_thread: threading.Thread | None = None
+        self._setup_error: str | None = None
+        self._ready = threading.Event()
 
     def _log(self, message: str):
         sys.stderr.write(f"[container-manager] {message}\n")
@@ -68,8 +73,26 @@ class ContainerManager:
     def ensure_image(self):
         if self.image_exists():
             return
-        self._log(f"Building sandbox image {self.image}")
-        self._docker("build", "--tag", self.image, str(self.dockerfile_dir))
+        self._log(f"Building sandbox image {self.image} (first run; this can take a few minutes)")
+        self.build_image()
+
+    def build_image(self):
+        """Build the sandbox image, streaming progress to stderr."""
+        process = subprocess.Popen(
+            [*self.docker_command, "build", "--tag", self.image, str(self.dockerfile_dir)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            self._log(f"build: {line.rstrip()}")
+        process.wait()
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"Docker image build failed ({process.returncode}); see logs above"
+            )
+        self._log(f"Image {self.image} built")
 
     def container_state(self) -> str:
         result = self._docker(
@@ -112,6 +135,49 @@ class ContainerManager:
         self._log(f"Starting existing container {self.container_name}")
         self._docker("start", self.container_name)
 
+    def start_background_setup(self):
+        """Prepare the sandbox (build image, start container) without blocking.
+
+        Safe to call repeatedly; only one setup runs at a time, and a failed
+        setup is retried on the next call.
+        """
+        with self._setup_lock:
+            if self._ready.is_set():
+                return
+            if self._setup_thread is not None and self._setup_thread.is_alive():
+                return
+            self._setup_error = None
+            self._setup_thread = threading.Thread(
+                target=self._setup, name="sandbox-setup", daemon=True
+            )
+            self._setup_thread.start()
+
+    def _setup(self):
+        try:
+            self.ensure_running()
+        except Exception as exc:
+            self._setup_error = str(exc)
+            self._log(f"Sandbox setup failed: {exc}")
+        else:
+            self._ready.set()
+            self._log("Sandbox is ready")
+
+    def _require_ready(self):
+        """Fast-path readiness gate so tool calls never block on an image build."""
+        if self._ready.is_set():
+            self.ensure_running()
+            return
+        error = self._setup_error
+        self.start_background_setup()
+        if error:
+            raise RuntimeError(
+                f"Sandbox setup failed and is being retried: {error}"
+            )
+        raise RuntimeError(
+            "The sandbox is still being prepared (building the Docker image "
+            "on first run). Retry this tool call in a minute or two."
+        )
+
     def exec(
         self,
         command: list[str],
@@ -120,7 +186,7 @@ class ContainerManager:
         check: bool = False,
     ) -> subprocess.CompletedProcess:
         """Execute an argv-style command inside the running container."""
-        self.ensure_running()
+        self._require_ready()
         args = ["exec"]
         if input_text is not None:
             args.append("--interactive")
@@ -133,11 +199,11 @@ class ContainerManager:
         )
 
     def copy_to(self, local_path: str, container_path: str):
-        self.ensure_running()
+        self._require_ready()
         self._docker("cp", local_path, f"{self.container_name}:{container_path}")
 
     def copy_from(self, container_path: str, local_path: str):
-        self.ensure_running()
+        self._require_ready()
         self._docker("cp", f"{self.container_name}:{container_path}", local_path)
 
     def stop_container(self):

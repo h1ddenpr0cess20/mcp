@@ -1,6 +1,8 @@
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from docker_shell_client import ContainerManager
 
 
@@ -36,17 +38,43 @@ def test_ensure_running_starts_stopped_container():
 def test_ensure_running_builds_and_creates_missing_container():
     manager = ContainerManager()
     with patch.object(manager, "_docker", side_effect=[
-        completed(), completed(code=1), completed(code=1), completed(), completed()
-    ]) as docker:
+        completed(), completed(code=1), completed(code=1), completed()
+    ]) as docker, patch.object(manager, "build_image") as build:
         manager.ensure_running()
+    build.assert_called_once()
     commands = [call.args for call in docker.call_args_list]
-    assert ("build", "--tag", manager.image, str(manager.dockerfile_dir)) in commands
     assert any(command[:2] == ("run", "--detach") for command in commands)
 
 
 def test_exec_uses_argv_and_interactive_stdin():
     manager = ContainerManager()
-    with patch.object(manager, "ensure_running"), patch.object(manager, "_docker", return_value=completed()) as docker:
+    with patch.object(manager, "_require_ready"), patch.object(manager, "_docker", return_value=completed()) as docker:
         manager.exec(["tee", "--", "/tmp/a file"], input_text="hello", check=True)
     assert docker.call_args.args[:4] == ("exec", "--interactive", "--workdir", manager.workdir)
     assert docker.call_args.kwargs["input_text"] == "hello"
+
+
+def test_exec_fails_fast_while_sandbox_is_building():
+    manager = ContainerManager()
+    with patch.object(manager, "start_background_setup") as setup:
+        with pytest.raises(RuntimeError, match="still being prepared"):
+            manager.exec(["true"])
+    setup.assert_called_once()
+
+
+def test_exec_reports_setup_error_and_retries():
+    manager = ContainerManager()
+    manager._setup_error = "build exploded"
+    with patch.object(manager, "start_background_setup") as setup:
+        with pytest.raises(RuntimeError, match="build exploded"):
+            manager.exec(["true"])
+    setup.assert_called_once()
+
+
+def test_exec_runs_normally_once_ready():
+    manager = ContainerManager()
+    manager._ready.set()
+    with patch.object(manager, "ensure_running"), patch.object(manager, "_docker", return_value=completed()) as docker:
+        result = manager.exec(["true"])
+    assert result.returncode == 0
+    assert docker.call_args.args[0] == "exec"

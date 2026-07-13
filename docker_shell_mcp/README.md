@@ -15,7 +15,10 @@ python docker_shell_mcp/server.py
 
 On first start the server builds `shell-mcp-sandbox:latest` from Ubuntu 24.04,
 creates the container, and mounts the named `shell-mcp-data` volume at
-`/workspace`. Later starts reuse both. Direct launches use HTTP at
+`/workspace`. Later starts reuse both. The build runs in the background with
+progress streamed to stderr; tool calls made before the sandbox is ready return
+an immediate "still being prepared" error instead of hanging — retry once the
+build finishes. Direct launches use HTTP at
 `http://127.0.0.1:9620/mcp`; MCP client launches use stdio.
 
 The image is designed as a batteries-included agent workspace. It includes
