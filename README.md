@@ -15,6 +15,14 @@ FastMCP server exposing the entire Last.fm API as MCP tools. Categories include:
 
 **Requirements**: Last.fm API key (free from https://www.last.fm/api)
 
+### Grokipedia MCP (`grokipedia_mcp/`)
+FastMCP server for scraping and structuring content from Grokipedia pages.
+
+**Features**:
+- Scrape page content into structured sections with headings and text blocks
+- Web scraping using BeautifulSoup
+- Clean separation between scraping logic and MCP server
+
 ### Yahoo Finance MCP (`yfinance_mcp/`)
 FastMCP server exposing Yahoo Finance data as MCP tools. No API key required.
 - Real-time quotes, market summary, market status
@@ -48,6 +56,15 @@ FastMCP server for shell execution and file operations over SSH. Optionally auto
 - Auto-creates and manages a Debian VM if VirtualBox is installed; otherwise connects to any SSH host
 
 **Requirements**: SSH-accessible target, or VirtualBox with `vboxmanage` on PATH
+
+### Docker Shell MCP (`docker_shell_mcp/`)
+Docker-backed version of Shell MCP with the same command and file tools, using
+an auto-managed Ubuntu container instead of SSH or VirtualBox.
+- Persistent named workspace volume with configurable CPU, memory, PID, user, and network settings
+- Auto-builds the sandbox image on first launch and reuses the container later
+- Copies files through the Docker CLI and serves generated files over local HTTP
+
+**Requirements**: Docker CLI and a running Docker daemon
 
 ### Subagent MCP (`subagent_mcp/`)
 FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any OpenAI-compatible endpoint.
@@ -98,8 +115,8 @@ package_name/
 
 ## Running Servers
 ```bash
-# Example for an MCP server
-cd server_directory
+# Example for Grokipedia MCP
+cd grokipedia_mcp
 python -m venv .venv && source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python server.py  # Launches MCP server for client integration
@@ -112,3 +129,4 @@ See individual server READMEs for specific setup instructions and configuration.
 - Clean architecture with separation of concerns
 - Python 3.9+ required
 - Each server can be used as a standalone package
+- Pull requests and pushes to `main` test each packaged MCP server independently in GitHub Actions

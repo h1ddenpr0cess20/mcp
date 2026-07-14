@@ -160,5 +160,5 @@ class AppManager:
                 f"am start -n {_SETTINGS_SECTIONS[section.lower()]}"
             )
         return self._adb.shell(
-            "am start -n com.amazon.tv.settings.v2/.tv.device.DeviceActivity"
+            "am start -n com.amazon.tv.settings.v2/.tv.MainSettingsActivity"
         )

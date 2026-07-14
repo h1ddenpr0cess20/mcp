@@ -5,13 +5,9 @@ from subagent_client import AgentRegistry
 
 class TestAgentRegistry:
     @pytest.mark.unit
-    def test_preset_agents_loaded(self):
+    def test_registry_starts_empty(self):
         registry = AgentRegistry()
-        agents = registry.list()
-        assert "reviewer" in agents
-        assert "summarizer" in agents
-        assert "extractor" in agents
-        assert "translator" in agents
+        assert registry.list() == []
 
     @pytest.mark.unit
     def test_create_agent(self):

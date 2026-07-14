@@ -1,6 +1,9 @@
+import requests
+
 from .album import AlbumAPI
 from .artist import ArtistAPI
 from .auth import AuthAPI
+from .base import LastfmAPIBase
 from .chart import ChartAPI
 from .geo import GeoAPI
 from .library import LibraryAPI
@@ -42,6 +45,7 @@ class LastfmClient:
 
 __all__ = [
     "LastfmClient",
+    "LastfmAPIBase",
     "AlbumAPI",
     "ArtistAPI",
     "AuthAPI",

@@ -28,7 +28,7 @@ class TestInstallApk:
             ["adb", "install", "-r", "/path/to/app.apk"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=120,
         )
         assert result["exit_code"] == 0
 
