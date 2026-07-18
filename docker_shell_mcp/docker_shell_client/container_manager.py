@@ -13,7 +13,7 @@ class ContainerManager:
     """Manage the Docker container used as the shell sandbox."""
 
     def __init__(self):
-        self.docker_command = shlex.split(os.getenv("DOCKER_COMMAND", "sudo -n docker"))
+        self.docker_command = shlex.split(os.getenv("DOCKER_COMMAND", "docker"))
         if not self.docker_command:
             raise ValueError("DOCKER_COMMAND must not be empty")
         self.container_name = os.getenv("DOCKER_CONTAINER", "shell-mcp-sandbox")
