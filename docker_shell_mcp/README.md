@@ -57,7 +57,9 @@ Copy `.env.example` to `.env`. Useful settings include:
 The default user is root inside the container so additional tools can be
 installed with `apt`. Docker's isolation boundary is not equivalent to a
 hardened VM; do not mount sensitive host paths or the Docker socket into this
-sandbox. The server deliberately does neither. The default command now invokes Docker without sudo. Historical note: the initial
+sandbox. The server deliberately does neither.
+
+The default command now invokes Docker without sudo. Historical note: the initial
 AI-assisted implementation used `sudo -n docker` because Docker required sudo on
 the development system at the time. Prefer rootless Docker; if your system still
 requires sudo, explicitly set `DOCKER_COMMAND=sudo -n docker`. The `-n` flag
