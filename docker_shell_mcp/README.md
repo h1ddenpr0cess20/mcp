@@ -42,7 +42,7 @@ Copy `.env.example` to `.env`. Useful settings include:
 
 | Variable | Default | Description |
 |---|---|---|
-| `DOCKER_COMMAND` | `sudo -n docker` | Non-interactive Docker command; set to `docker` for rootless or group-enabled Docker |
+| `DOCKER_COMMAND` | `docker` | Docker command; works with rootless or group-enabled Docker |
 | `DOCKER_IMAGE` | `shell-mcp-sandbox:latest` | Image to use; missing images are built from the bundled Dockerfile |
 | `DOCKER_CONTAINER` | `shell-mcp-sandbox` | Managed container name |
 | `DOCKER_VOLUME` | `shell-mcp-data` | Persistent volume mounted at the workdir |
@@ -57,6 +57,9 @@ Copy `.env.example` to `.env`. Useful settings include:
 The default user is root inside the container so additional tools can be
 installed with `apt`. Docker's isolation boundary is not equivalent to a
 hardened VM; do not mount sensitive host paths or the Docker socket into this
-sandbox. The server deliberately does neither. The default command expects
-passwordless sudo permission for Docker; `-n` makes a missing permission fail
-immediately instead of blocking an MCP process on a password prompt.
+sandbox. The server deliberately does neither. The default command now invokes Docker without sudo. Historical note: the initial
+AI-assisted implementation used `sudo -n docker` because Docker required sudo on
+the development system at the time. Prefer rootless Docker; if your system still
+requires sudo, explicitly set `DOCKER_COMMAND=sudo -n docker`. The `-n` flag
+makes missing permission fail immediately instead of blocking an MCP process on
+a password prompt.
