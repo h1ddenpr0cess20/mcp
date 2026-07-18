@@ -19,14 +19,14 @@ def test_ensure_running_reuses_running_container(monkeypatch):
     assert docker.call_count == 2
 
 
-def test_docker_command_defaults_to_sudo_docker(monkeypatch):
+def test_docker_command_defaults_to_docker(monkeypatch):
     monkeypatch.delenv("DOCKER_COMMAND", raising=False)
-    assert ContainerManager().docker_command == ["sudo", "-n", "docker"]
+    assert ContainerManager().docker_command == ["docker"]
 
 
 def test_docker_command_can_be_overridden(monkeypatch):
-    monkeypatch.setenv("DOCKER_COMMAND", "docker")
-    assert ContainerManager().docker_command == ["docker"]
+    monkeypatch.setenv("DOCKER_COMMAND", "sudo -n docker")
+    assert ContainerManager().docker_command == ["sudo", "-n", "docker"]
 
 
 def test_ensure_running_starts_stopped_container():
