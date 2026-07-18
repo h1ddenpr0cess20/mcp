@@ -10,7 +10,7 @@ pip install -r webshell_mcp/requirements.txt
 python webshell_mcp/server.py
 ```
 
-The server runs on HTTP transport at `127.0.0.1:9710` by default. On first run with VirtualBox installed, the VM is created and provisioned automatically (10-20 minutes). Subsequent starts restore the `clean-base` snapshot and are ready in under two minutes.
+The server runs on HTTP transport at `127.0.0.1:9710` by default. On first run with VirtualBox installed, the VM is created and provisioned automatically (10-20 minutes). Subsequent starts restore a versioned, validated toolchain snapshot and are ready in under two minutes.
 
 > **No VirtualBox?** Set `SSH_HOST`, `SSH_USER`, and `SSH_KEY_PATH` in a `.env` file to point at any existing Linux host that has SearXNG, curl_cffi, trafilatura, and Playwright installed.
 
@@ -47,6 +47,12 @@ Copy `.env.example` to `.env` and fill in values.
 ### VirtualBox auto-managed VM (optional)
 
 When `vboxmanage` is on PATH, `VMManager` automatically creates and installs a Debian VM as the sandbox with SearXNG, Playwright, curl_cffi, and trafilatura pre-installed. All variables below are optional.
+
+It also includes the same compact agent workstation as `shell_mcp`: Git and
+SSH, Python and Node.js development tools, TypeScript lint/format tooling,
+C/C++ build essentials, shell utilities, SQLite, Graphviz, media handling, and
+the LibreOffice/Pandoc/PDF/OCR/spreadsheet/presentation stack. Large secondary
+runtimes and services remain project-local to avoid unnecessary image growth.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -97,5 +103,6 @@ Files are stored in `~/mcp-files/`.
 - SearXNG runs as a systemd service inside the VM and starts automatically on boot.
 - URL fetching uses curl_cffi (Chrome TLS fingerprint) first, then falls back to a headless Chromium browser for JS-heavy pages. Both run inside the VM.
 - With `nat` networking, SSH is port-forwarded to `127.0.0.1:2223` and SearXNG to `127.0.0.1:8889`.
-- The VM unattended install takes 10-20 minutes on first run. A `clean-base` snapshot is taken automatically after install.
+- The VM unattended install takes 10-20 minutes on first run. A versioned, validated toolchain snapshot is taken automatically after install.
+- Existing legacy `clean-base` VMs are upgraded and re-snapshotted automatically on their next start.
 - See `server.py` for transport options (HTTP, SSE, stdio).

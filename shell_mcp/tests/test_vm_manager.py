@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 import pytest
 from unittest.mock import MagicMock, patch, call
 
@@ -277,22 +278,44 @@ class TestEnsureRunningNoVbox:
 class TestEnsureRunningVmRunning:
     def test_returns_localhost_2222_for_nat(self, monkeypatch):
         vm = _vm(monkeypatch, NETWORK_MODE="nat")
-
-        vm_list_output = '"test-vm" {abc}'
-        vm_state_output = 'VMState="running"\n'
-
         with patch("shutil.which", return_value="/usr/bin/vboxmanage"):
-            with patch("subprocess.run", side_effect=[
-                _completed(0, vm_list_output),   # vm_exists → list vms
-                _completed(0, vm_state_output),  # vm_state → showvminfo
-                _completed(0, 'SnapshotName="clean-base"'),  # _snapshot_exists
-                _completed(0),                   # controlvm poweroff (restore_clean)
-                _completed(0),                   # snapshot restore
-                _completed(0, 'VMState="poweroff"\n'),  # start_vm → vm_state
-                _completed(0),                   # startvm
-                _completed(0, "ok"),             # wait_for_ssh → ssh
-            ]):
+            with patch.object(vm, "vm_exists", return_value=True), \
+                    patch.object(vm, "vm_state", return_value="running"), \
+                    patch.object(vm, "_snapshot_exists", side_effect=[False, True]), \
+                    patch.object(vm, "restore_clean") as restore, \
+                    patch.object(vm, "start_vm"), \
+                    patch.object(vm, "wait_for_ssh", return_value="127.0.0.1"), \
+                    patch.object(vm, "_ensure_guest_toolchain") as ensure_tools, \
+                    patch.object(vm, "_vbox") as vbox:
                 result = vm.ensure_running()
 
         assert result["ssh_host"] == "127.0.0.1"
         assert result["ssh_port"] == 2222
+        restore.assert_called_once_with("clean-base")
+        ensure_tools.assert_called_once_with("127.0.0.1", 2222)
+        assert "clean-base-toolchain-2" in vbox.call_args.args
+
+
+class TestToolchainProvisioning:
+    def test_script_refreshes_and_validates_agent_toolchain(self, monkeypatch, tmp_path):
+        pubkey = tmp_path / "key.pub"
+        pubkey.write_text("ssh-ed25519 AAAA test")
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("SSH_PUBKEY_PATH", str(pubkey))
+        vm = _vm(monkeypatch)
+        (tmp_path / "VirtualBox VMs" / vm.vm_name).mkdir(parents=True)
+
+        script_path = Path(vm._write_setup_script())
+        content = script_path.read_text()
+
+        assert "apt_retry update" in content
+        assert "nodejs npm" in content
+        assert "git git-lfs" in content
+        assert "pandoc poppler-utils libreoffice-nogui" in content
+        assert "typescript tsx eslint prettier" in content
+        assert "toolchain-2" in content
+        assert " bc watch " not in content
+        assert content.index("apt_retry update") < content.index(
+            "apt_retry install -y --no-install-recommends ca-certificates"
+        )
+        subprocess.run(["dash", "-n", script_path], check=True)

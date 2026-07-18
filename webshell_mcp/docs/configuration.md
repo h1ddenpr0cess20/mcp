@@ -54,7 +54,13 @@ On first run with no existing VM, the server will:
 3. Create and configure the VM.
 4. Run the unattended Debian installer (~10–20 minutes).
 5. Install SearXNG, Playwright, curl_cffi, and trafilatura inside the VM.
-6. Take a `clean-base` snapshot when SSH is confirmed reachable.
+6. Validate the web, development, and document toolchains.
+7. Take a versioned toolchain snapshot when validation succeeds.
+
+An existing legacy `clean-base` snapshot is upgraded automatically on the next
+server start. Package indexes are refreshed with retries, required tools fail
+provisioning loudly, and release-specific optional packages are isolated so one
+unavailable package cannot cancel the rest of the install.
 
 Subsequent starts skip all of the above and connect immediately.
 

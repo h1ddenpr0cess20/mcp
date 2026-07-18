@@ -121,7 +121,13 @@ On first run with no existing VM, the server will:
 2. Generate an SSH key pair at `~/.ssh/ai_vm_key`.
 3. Create and configure the VM.
 4. Run the unattended Debian installer (~10–20 minutes).
-5. Take a `clean-base` snapshot when SSH is confirmed reachable.
+5. Validate Git, Node.js, Python, build, and document tooling.
+6. Take a versioned toolchain snapshot when validation succeeds.
+
+An existing legacy `clean-base` snapshot is upgraded automatically on the next
+server start. Package indexes are refreshed with retries, required tools fail
+provisioning loudly, and release-specific optional packages are isolated so one
+unavailable package cannot cancel the rest of the install.
 
 Subsequent starts skip all of the above and connect immediately.
 

@@ -9,6 +9,57 @@ import time
 
 ISO_URL = "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.4.0-amd64-netinst.iso"
 ISO_MIN_SIZE = 500 * 1024 * 1024  # 500MB — netinst is ~754MB
+TOOLCHAIN_VERSION = "2"
+TOOLCHAIN_MARKER = f"/var/lib/shell-mcp/toolchain-{TOOLCHAIN_VERSION}"
+TOOLCHAIN_SNAPSHOT = f"clean-base-toolchain-{TOOLCHAIN_VERSION}"
+
+# Compact, broadly useful agent workstation. Large secondary language stacks,
+# database servers, TeX, Calibre, Podman, and Ansible are intentionally omitted;
+# projects can install those when they are actually needed.
+REQUIRED_APT_PACKAGES = (
+    "ca-certificates curl wget openssh-client git git-lfs "
+    "python3 python3-pip python3-venv python3-dev "
+    "build-essential nodejs npm "
+    "pandoc poppler-utils libreoffice-nogui ghostscript qpdf tesseract-ocr "
+    "fonts-dejavu-core fonts-liberation2 fonts-noto-core"
+)
+AGENT_APT_PACKAGES = (
+    "vim nano tmux jq yq tree file less rsync patch diffutils moreutils gawk "
+    "unzip zip p7zip-full xz-utils tar fzf bat ripgrep fd-find "
+    "dnsutils iputils-ping netcat-openbsd socat whois "
+    "htop lsof strace procps xxd binutils "
+    "cmake pkg-config autoconf automake clang shellcheck shfmt "
+    "sqlite3 ffmpeg imagemagick graphviz xvfb man-db gnupg openssl cron ufw"
+)
+OPTIONAL_APT_PACKAGES = "wkhtmltopdf unoconv miller"
+
+
+def _apt_toolchain_lines() -> list[str]:
+    """Shell lines for reliable, release-tolerant package provisioning."""
+    return [
+        "export DEBIAN_FRONTEND=noninteractive",
+        "apt_retry() {",
+        "  attempts=0",
+        "  until apt-get -o Acquire::Retries=3 \"$@\"; do",
+        "    attempts=$((attempts + 1))",
+        "    [ \"$attempts\" -ge 3 ] && return 1",
+        "    sleep 5",
+        "  done",
+        "}",
+        "install_available() {",
+        "  apt_retry install -y --no-install-recommends \"$@\" && return 0",
+        "  echo 'Package group failed; retrying packages individually' >&2",
+        "  for package in \"$@\"; do",
+        "    apt_retry install -y --no-install-recommends \"$package\" || "
+        "echo \"WARNING: package $package is unavailable\" >&2",
+        "  done",
+        "}",
+        "dpkg --configure -a || true",
+        "apt_retry update",
+        f"apt_retry install -y --no-install-recommends {REQUIRED_APT_PACKAGES}",
+        f"install_available {AGENT_APT_PACKAGES}",
+        f"install_available {OPTIONAL_APT_PACKAGES}",
+    ]
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -263,71 +314,17 @@ class VMManager:
         vm_dir = os.path.expanduser(f"~/VirtualBox VMs/{self.vm_name}")
         script_path = os.path.join(vm_dir, "vbox-setup.sh")
 
-        packages = " ".join([
-            # editors / shell
-            "vim", "nano", "tmux", "screen",
-            # core utils
-            "curl", "wget",
-            "jq", "tree", "pv", "bc", "watch", "file", "less", "rsync",
-            "unzip", "zip", "p7zip-full", "xz-utils", "tar",
-            "patch", "diffutils", "colordiff",
-            "moreutils", "gawk", "parallel",
-            # interactive / scripting
-            "expect", "entr",
-            # modern shell tools
-            "fzf", "bat", "ripgrep", "fd-find", "silversearcher-ag",
-            # network
-            "net-tools", "nmap", "netcat-openbsd", "socat",
-            "dnsutils", "traceroute", "iputils-ping",
-            "tcpdump", "whois",
-            # web / text browsers
-            "w3m", "html2text",
-            # monitoring / debug
-            "htop", "iotop", "lsof", "strace", "sysstat", "procps",
-            "xxd", "binutils",
-            # build
-            "build-essential", "cmake", "pkg-config", "autoconf", "automake",
-            "clang",
-            "python3", "python3-pip", "python3-venv", "python3-dev",
-            "nodejs", "npm",
-            "golang-go",
-            "rustc", "cargo",
-            "ruby", "ruby-dev",
-            "default-jre", "default-jdk",
-            "php-cli", "lua5.4",
-            "git", "git-lfs",
-            "maven", "gradle",
-            # data / db
-            "sqlite3", "postgresql-client", "mariadb-client", "redis-tools",
-            # media
-            "ffmpeg", "imagemagick",
-            # document / conversion
-            "pandoc", "man-db",
-            "poppler-utils", "wkhtmltopdf",
-            "libreoffice", "ghostscript", "qpdf",
-            "tesseract-ocr", "unoconv", "calibre", "miller",
-            # graph / diagram rendering
-            "graphviz",
-            # crypto / certs
-            "gnupg", "openssl",
-            # infra / containers
-            "podman", "ansible",
-            # scheduler
-            "cron",
-            # firewall
-            "ufw",
-        ])
-
         lines = [
             "#!/bin/sh",
             # SSH key setup — must succeed, wait_for_ssh uses key auth only
             f"mkdir -p /home/{self.vm_user}/.ssh",
-            f"echo '{ssh_pubkey}' > /home/{self.vm_user}/.ssh/authorized_keys",
+            f"printf '%s\\n' {shlex.quote(ssh_pubkey)} > /home/{self.vm_user}/.ssh/authorized_keys",
             f"chown -R {self.vm_user}:{self.vm_user} /home/{self.vm_user}/.ssh",
             f"chmod 700 /home/{self.vm_user}/.ssh",
             f"chmod 600 /home/{self.vm_user}/.ssh/authorized_keys",
-            # Packages — non-fatal so SSH access is never blocked by a failed install
-            f"apt-get install -y {packages} || true",
+            # Refresh the netinst package indexes, install the guaranteed core,
+            # then isolate any release-specific optional package failure.
+            *_apt_toolchain_lines(),
             # Firewall
             "ufw default deny incoming || true",
             "ufw default allow outgoing || true",
@@ -371,11 +368,24 @@ class VMManager:
             # --- Security ---
             "pip3 install -q cryptography || true",
             # --- Dev tools ---
-            "pip3 install -q psutil gitpython pygments black ruff mypy "
+            "pip3 install -q psutil gitpython pygments uv black ruff mypy "
             "pytest hypothesis watchdog || true",
             # --- Cloud / infra SDKs ---
             "pip3 install -q docker kubernetes boto3 "
             "google-cloud-storage azure-storage-blob || true",
+            # Small, high-value JavaScript authoring toolchain.
+            "npm install --global typescript tsx eslint prettier || true",
+            # Never bless a snapshot that only partially provisioned. The
+            # marker is also used to upgrade legacy VMs on their next start.
+            "missing=''",
+            "for command in git node npm python3 pip3 gcc make pandoc libreoffice; do",
+            "  command -v \"$command\" >/dev/null 2>&1 || missing=\"$missing $command\"",
+            "done",
+            "[ -z \"$missing\" ] || { echo \"Missing required tools:$missing\" >&2; exit 1; }",
+            "python3 -c 'import docx, openpyxl, pptx, pypdf, reportlab' || "
+            "{ echo 'Missing required document Python libraries' >&2; exit 1; }",
+            f"mkdir -p {os.path.dirname(TOOLCHAIN_MARKER)}",
+            f"touch {TOOLCHAIN_MARKER}",
         ]
 
         if self.vm_sudo:
@@ -389,6 +399,48 @@ class VMManager:
             f.write("\n".join(lines) + "\n")
 
         return script_path
+
+    def _guest_toolchain_is_current(self, host: str, port: int) -> bool:
+        result = subprocess.run(
+            [
+                "ssh", "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes",
+                "-p", str(port), "-i", self.ssh_key_path,
+                f"{self.vm_user}@{host}", f"test -f {TOOLCHAIN_MARKER}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+
+    def _ensure_guest_toolchain(self, host: str, port: int):
+        """Provision or repair the toolchain in an already-created VM."""
+        if self._guest_toolchain_is_current(host, port):
+            return
+
+        self._log(f"Installing managed VM toolchain version {TOOLCHAIN_VERSION}")
+        with open(self._write_setup_script()) as f:
+            script = f.read()
+
+        ssh = [
+            "ssh", "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes",
+            "-p", str(port), "-i", self.ssh_key_path, f"{self.vm_user}@{host}",
+        ]
+        passwordless = subprocess.run(
+            [*ssh, "sudo -n true"], capture_output=True, text=True,
+        ).returncode == 0
+        if passwordless:
+            result = subprocess.run(
+                [*ssh, "sudo -n /bin/sh -s"], input=script,
+                capture_output=True, text=True,
+            )
+        else:
+            result = subprocess.run(
+                [*ssh, "sudo -S -p '' /bin/sh -s"],
+                input=f"{self.vm_pass}\n{script}", capture_output=True, text=True,
+            )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            raise RuntimeError(f"Managed VM toolchain provisioning failed: {detail}")
 
     def _configure_unattended_install(self):
         self._log("Configuring unattended install")
@@ -600,15 +652,15 @@ class VMManager:
         result = self._vbox("snapshot", self.vm_name, "list", "--machinereadable", check=False)
         return f'SnapshotName="{name}"' in (result.stdout or "")
 
-    def restore_clean(self):
-        """Power off the VM (if running) and restore the clean-base snapshot."""
+    def restore_clean(self, snapshot_name: str = TOOLCHAIN_SNAPSHOT):
+        """Power off the VM (if running) and restore a clean snapshot."""
         state = self.vm_state()
         if state == "running":
             self._log("Powering off VM for snapshot restore")
             self._vbox("controlvm", self.vm_name, "poweroff")
             time.sleep(3)
-        with _Spinner("Restoring clean-base snapshot"):
-            self._vbox("snapshot", self.vm_name, "restore", "clean-base")
+        with _Spinner(f"Restoring {snapshot_name} snapshot"):
+            self._vbox("snapshot", self.vm_name, "restore", snapshot_name)
 
     def start_vm(self):
         state = self.vm_state()
@@ -749,6 +801,7 @@ class VMManager:
 
         state = self.vm_state() if self.vm_exists() else "not_found"
 
+        snapshot_is_current = False
         if state == "not_found":
             self._log("VM does not exist — creating from scratch")
             self.ensure_iso()
@@ -757,16 +810,27 @@ class VMManager:
                 self.create_vm()
             self.start_vm()
             host = self.wait_for_ssh(timeout=1200)
+            port = 2222 if self.network_mode == "nat" else self.ssh_port
+            self._ensure_guest_toolchain(host, port)
             with _Spinner("Taking post-install snapshot"):
-                self._vbox("snapshot", self.vm_name, "take", "clean-base",
-                            "--description", "Fresh install, SSH ready, UFW enabled")
+                self._vbox("snapshot", self.vm_name, "take", TOOLCHAIN_SNAPSHOT,
+                            "--description", "Validated development and document toolchain")
         else:
-            if self._snapshot_exists("clean-base"):
-                self.restore_clean()
+            snapshot_is_current = self._snapshot_exists(TOOLCHAIN_SNAPSHOT)
+            if snapshot_is_current:
+                self.restore_clean(TOOLCHAIN_SNAPSHOT)
+            elif self._snapshot_exists("clean-base"):
+                self.restore_clean("clean-base")
             else:
                 self._log("clean-base snapshot not found — starting as-is")
             self.start_vm()
             host = self.wait_for_ssh(timeout=120)
 
         port = 2222 if self.network_mode == "nat" else self.ssh_port
+        if state != "not_found":
+            self._ensure_guest_toolchain(host, port)
+            if not snapshot_is_current:
+                with _Spinner("Saving upgraded toolchain snapshot"):
+                    self._vbox("snapshot", self.vm_name, "take", TOOLCHAIN_SNAPSHOT,
+                               "--description", "Validated development and document toolchain")
         return {"ssh_host": host, "ssh_port": port}
