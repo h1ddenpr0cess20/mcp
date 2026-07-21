@@ -101,6 +101,12 @@ Copy `.env.example` to `.env`. Common settings:
 - `colab_shell_client/file_server.py` — local HTTP server for `fetch_file`
 - `server.py` — FastMCP tool definitions
 
+## Documentation
+
+- [`docs/configuration.md`](docs/configuration.md) — install, backends, bridge setup, env vars, transports, and connecting a client
+- [`docs/tools.md`](docs/tools.md) — full reference for every tool, return shapes, and error handling
+- [`docs/examples.md`](docs/examples.md) — worked workflows and sample prompts
+
 ## Notes
 
 - The bridge is standard-library only on purpose: a fresh Colab kernel has no

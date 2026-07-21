@@ -41,6 +41,12 @@ virtual environment at `/opt/agent-venv`.
 - `get_system_info` — inspect container system resources
 - `fetch_file` — expose a generated file at a local HTTP download URL
 
+## Documentation
+
+- [`docs/configuration.md`](docs/configuration.md) — install, container settings, ephemeral mode, transports, and connecting a client
+- [`docs/tools.md`](docs/tools.md) — full reference for every tool, return shapes, and error handling
+- [`docs/examples.md`](docs/examples.md) — worked workflows and sample prompts
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Useful settings include:
