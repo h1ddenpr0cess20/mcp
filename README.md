@@ -60,8 +60,9 @@ FastMCP server for shell execution and file operations over SSH. Optionally auto
 ### Docker Shell MCP (`docker_shell_mcp/`)
 Docker-backed version of Shell MCP with the same command and file tools, using
 an auto-managed Ubuntu container instead of SSH or VirtualBox.
-- Persistent named workspace volume with configurable CPU, memory, PID, user, and network settings
-- Auto-builds the sandbox image on first launch and reuses the container later
+- Fresh container and workspace volume every server start by default (`DOCKER_EPHEMERAL=false` to persist instead), matching the clean-slate-per-session behavior of `shell_mcp`/`webshell_mcp`
+- Configurable CPU, memory, PID, user, and network settings
+- Auto-builds and caches the sandbox image on first launch
 - Copies files through the Docker CLI and serves generated files over local HTTP
 
 **Requirements**: Docker CLI and a running Docker daemon

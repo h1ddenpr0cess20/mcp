@@ -19,6 +19,46 @@ def test_ensure_running_reuses_running_container(monkeypatch):
     assert docker.call_count == 2
 
 
+def test_ephemeral_defaults_to_enabled(monkeypatch):
+    monkeypatch.delenv("DOCKER_EPHEMERAL", raising=False)
+    assert ContainerManager().ephemeral is True
+
+
+def test_ephemeral_can_be_disabled(monkeypatch):
+    monkeypatch.setenv("DOCKER_EPHEMERAL", "false")
+    assert ContainerManager().ephemeral is False
+
+
+def test_reset_for_new_session_discards_container_and_volume():
+    manager = ContainerManager()
+    with patch.object(manager, "_docker", return_value=completed()) as docker:
+        manager.reset_for_new_session()
+    commands = [call.args for call in docker.call_args_list]
+    assert ("rm", "--force", manager.container_name) in commands
+    assert ("volume", "rm", "--force", manager.volume) in commands
+
+
+def test_setup_resets_before_ensure_running_when_ephemeral(monkeypatch):
+    monkeypatch.setenv("DOCKER_EPHEMERAL", "true")
+    manager = ContainerManager()
+    calls = []
+    with patch.object(manager, "reset_for_new_session", side_effect=lambda: calls.append("reset")), \
+            patch.object(manager, "ensure_running", side_effect=lambda: calls.append("ensure")):
+        manager._setup()
+    assert calls == ["reset", "ensure"]
+    assert manager._ready.is_set()
+
+
+def test_setup_skips_reset_when_not_ephemeral(monkeypatch):
+    monkeypatch.setenv("DOCKER_EPHEMERAL", "false")
+    manager = ContainerManager()
+    with patch.object(manager, "reset_for_new_session") as reset, \
+            patch.object(manager, "ensure_running"):
+        manager._setup()
+    reset.assert_not_called()
+    assert manager._ready.is_set()
+
+
 def test_docker_command_defaults_to_sudo_docker(monkeypatch):
     monkeypatch.delenv("DOCKER_COMMAND", raising=False)
     assert ContainerManager().docker_command == ["sudo", "-n", "docker"]

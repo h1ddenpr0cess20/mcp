@@ -29,6 +29,9 @@ class ContainerManager:
         self.remove_on_exit = os.getenv("DOCKER_REMOVE_ON_EXIT", "false").lower() in (
             "1", "true", "yes",
         )
+        self.ephemeral = os.getenv("DOCKER_EPHEMERAL", "true").lower() in (
+            "1", "true", "yes",
+        )
         self.command_timeout = int(os.getenv("COMMAND_TIMEOUT", "1200"))
         self.dockerfile_dir = Path(__file__).resolve().parent / "sandbox"
         self._setup_lock = threading.Lock()
@@ -151,6 +154,22 @@ class ContainerManager:
         self._log(f"Creating container {self.container_name}")
         self._docker(*args)
 
+    def reset_for_new_session(self):
+        """Discard any container and workspace volume left over from a previous session.
+
+        Mirrors the clean-snapshot restore the VM-backed shell sandboxes do on
+        every start, so each new server process gets a fresh sandbox instead
+        of resuming whatever the last session left behind. `--force` makes
+        both commands no-ops when nothing exists yet, so this is safe to run
+        unconditionally on first launch too.
+        """
+        self._log(
+            f"Ephemeral mode: discarding container {self.container_name} "
+            f"and volume {self.volume} from any previous session"
+        )
+        self._docker("rm", "--force", self.container_name)
+        self._docker("volume", "rm", "--force", self.volume)
+
     def ensure_running(self):
         """Build or refresh the image if needed and start or create the container."""
         self._docker("version", check=True)
@@ -187,6 +206,8 @@ class ContainerManager:
 
     def _setup(self):
         try:
+            if self.ephemeral:
+                self.reset_for_new_session()
             self.ensure_running()
         except Exception as exc:
             self._setup_error = str(exc)
