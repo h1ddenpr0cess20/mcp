@@ -77,19 +77,6 @@ FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any
 
 **Requirements**: OpenAI-compatible endpoint with Responses API support (e.g. LM Studio)
 
-### Colab Shell MCP (`colab_shell_mcp/`)
-Shell execution and file operations inside a Google Colab runtime, with the same
-tool surface as `shell_mcp`/`docker_shell_mcp`/`webshell_mcp` but backed by
-Colab's free CPU/GPU/TPU VM.
-- Runs directly inside Colab (local backend) or drives a remote Colab from your
-  laptop through a bundled stdlib HTTP bridge over a tunnel (remote backend)
-- Execute commands, read/write files, upload/download, system info (including
-  the attached GPU), and serve generated files over local HTTP
-- `COLAB_MODE=auto` picks the backend from whether a bridge URL is configured
-
-**Requirements**: A Google Colab runtime (local backend needs nothing extra;
-remote backend needs the bridge running in Colab plus a tunnel)
-
 ### WebShell MCP (`webshell_mcp/`)
 Combined FastMCP server: sandboxed shell execution + web search and fetching, all in one VM. SearXNG runs inside the VM as a systemd service.
 - All shell tools: execute commands, read/write files, upload/download via SFTP, system info, file serving
