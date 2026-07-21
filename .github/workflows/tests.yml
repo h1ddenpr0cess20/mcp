@@ -22,6 +22,7 @@ jobs:
       matrix:
         server:
           - android_mcp
+          - colab_shell_mcp
           - docker_shell_mcp
           - firetv_mcp
           - grokipedia_mcp
