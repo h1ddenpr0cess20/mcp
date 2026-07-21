@@ -43,6 +43,13 @@ Copy `.env.example` to `.env` and fill in values.
 
 When `vboxmanage` is on PATH, `VMManager` automatically creates and installs a Debian VM as the sandbox. All variables below are optional.
 
+The managed image includes a compact agent workstation: Git/Git LFS and SSH,
+Python with common development and document libraries, Node.js/npm plus
+TypeScript/ESLint/Prettier, C/C++ build tools, shell linting, modern search and
+archive utilities, SQLite, Graphviz, image/media tools, and the LibreOffice,
+Pandoc, PDF, OCR, spreadsheet, and presentation toolchain. Large secondary
+language stacks and services are left project-local to keep the base VM lean.
+
 | Variable | Default | Description |
 |---|---|---|
 | `VM_NAME` | `ai-sandbox` | VirtualBox VM name |
@@ -77,5 +84,6 @@ Files are stored in `~/mcp-files/`.
 ## Notes
 
 - With `hostonly` networking, the sandbox gets two NICs: NAT (internet during install) and host-only (SSH access from host). The server connects via the host-only IP on port 22.
-- The VM unattended install takes 10–20 minutes on first run. A `clean-base` snapshot is taken automatically after install.
+- The VM unattended install takes 10–20 minutes on first run. A versioned, validated toolchain snapshot is taken automatically after install.
+- Existing legacy `clean-base` VMs are upgraded and re-snapshotted automatically on their next start.
 - See `server.py` for transport options (HTTP, SSE, stdio).
