@@ -294,6 +294,8 @@ def benchmark_concurrency(model: str = "", max_level: int = 4) -> dict:
 
 if __name__ == "__main__":
     if sys.stdin.isatty():
-        mcp.run(transport="http", host="127.0.0.1", port=9810, path="/mcp")
+        from mcp_http_compat import serve_http
+
+        serve_http(mcp, host="127.0.0.1", port=9810, path="/mcp")
     else:
         mcp.run()

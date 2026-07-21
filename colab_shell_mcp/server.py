@@ -163,4 +163,6 @@ if __name__ == "__main__":
     if transport == "stdio" or (not transport and not sys.stdin.isatty()):
         mcp.run()
     else:
-        mcp.run(transport="http", host=host, port=port, path="/mcp")
+        from mcp_http_compat import serve_http
+
+        serve_http(mcp, host=host, port=port, path="/mcp")

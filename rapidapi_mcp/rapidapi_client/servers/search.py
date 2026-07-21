@@ -48,7 +48,9 @@ def run_server(*, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, force_http
     """Run the search server. HTTP if launched directly or force_http, stdio if piped."""
     import sys
     if force_http or sys.stdin.isatty():
-        server.run(transport="http", host=host, port=port)
+        from rapidapi_client.http_compat import serve_http
+
+        serve_http(server, host=host, port=port, path="/mcp")
     else:
         server.run()
 

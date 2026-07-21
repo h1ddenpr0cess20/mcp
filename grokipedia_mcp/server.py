@@ -46,6 +46,8 @@ def search_grokipedia(
 if __name__ == "__main__":
     import sys
     if sys.stdin.isatty():
-        mcp.run(transport="http", host="127.0.0.1", port=9110, path="/mcp")
+        from mcp_http_compat import serve_http
+
+        serve_http(mcp, host="127.0.0.1", port=9110, path="/mcp")
     else:
         mcp.run()

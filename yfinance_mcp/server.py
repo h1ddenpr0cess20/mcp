@@ -252,6 +252,8 @@ def get_news(symbol: str, count: int = 10):
 if __name__ == "__main__":
     import sys
     if sys.stdin.isatty():
-        mcp.run(transport="http", host="127.0.0.1", port=9301, path="/mcp")
+        from mcp_http_compat import serve_http
+
+        serve_http(mcp, host="127.0.0.1", port=9301, path="/mcp")
     else:
         mcp.run()
