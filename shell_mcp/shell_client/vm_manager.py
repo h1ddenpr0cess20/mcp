@@ -676,6 +676,45 @@ class VMManager:
                     return addr
         return None
 
+    def _quick_ssh_probe(self, timeout: int = 5) -> str | None:
+        """Single-shot check for whether SSH is already reachable.
+
+        Lets ensure_running() skip the restore/reboot cycle when the VM is
+        already running and healthy — e.g. this process was respawned after
+        a client-side timeout while the VM itself never went down. Returns
+        the reachable host, or None if a fresh restore/reboot is needed.
+        """
+        if self.network_mode == "hostonly":
+            host = self._hostonly_vm_ip()
+            port = 22
+        elif self.network_mode == "nat":
+            host = "127.0.0.1"
+            port = 2222
+        else:
+            host = self.ssh_host
+            port = self.ssh_port
+
+        if not host:
+            return None
+
+        result = subprocess.run(
+            [
+                "ssh",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", f"ConnectTimeout={timeout}",
+                "-o", "BatchMode=yes",
+                "-p", str(port),
+                "-i", self.ssh_key_path,
+                f"{self.vm_user}@{host}",
+                "echo ok",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and "ok" in result.stdout:
+            return host
+        return None
+
     def wait_for_ssh(self, timeout: int = 600, interval: int = 10) -> str:
         """Wait for SSH to become reachable. Returns the SSH host to use."""
         if self.network_mode == "hostonly":
@@ -761,12 +800,16 @@ class VMManager:
                 self._vbox("snapshot", self.vm_name, "take", "clean-base",
                             "--description", "Fresh install, SSH ready, UFW enabled")
         else:
-            if self._snapshot_exists("clean-base"):
-                self.restore_clean()
+            host = self._quick_ssh_probe() if state == "running" else None
+            if host:
+                self._log(f"VM already running with SSH reachable at {host} — reusing")
             else:
-                self._log("clean-base snapshot not found — starting as-is")
-            self.start_vm()
-            host = self.wait_for_ssh(timeout=120)
+                if self._snapshot_exists("clean-base"):
+                    self.restore_clean()
+                else:
+                    self._log("clean-base snapshot not found — starting as-is")
+                self.start_vm()
+                host = self.wait_for_ssh(timeout=120)
 
         port = 2222 if self.network_mode == "nat" else self.ssh_port
         return {"ssh_host": host, "ssh_port": port}

@@ -2,6 +2,7 @@ import atexit
 import os
 import signal
 import sys
+import threading
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -12,11 +13,7 @@ from webshell_client.vm_manager import VMManager
 
 load_dotenv()
 
-# --- Shell setup ---
 _vm = VMManager()
-_conn = _vm.ensure_running()
-_client = ShellClient(host=_conn["ssh_host"], port=_conn["ssh_port"])
-_file_server = FileServer()
 atexit.register(_vm.stop_vm)
 
 
@@ -26,14 +23,66 @@ def _handle_signal(signum, frame):
 
 signal.signal(signal.SIGTERM, _handle_signal)
 
-# --- Web setup ---
-SEARXNG_URL = os.environ.get("SEARXNG_URL") or _conn["searxng_url"]
 SEARXNG_TIMEOUT = float(os.environ.get("SEARXNG_TIMEOUT", "30"))
 FETCH_TIMEOUT = float(os.environ.get("FETCH_TIMEOUT", "30"))
 FETCH_PROXIES = [p.strip() for p in os.environ.get("FETCH_PROXIES", "").split(",") if p.strip()]
 
-_search = SearchClient(SEARXNG_URL, timeout=SEARXNG_TIMEOUT)
-_fetch = FetchClient(_client, timeout=FETCH_TIMEOUT, proxies=FETCH_PROXIES or None)
+# VM bring-up (create/restore/boot/wait-for-SSH, then SearXNG) can take
+# anywhere from seconds to tens of minutes. Do it on a background thread so
+# the MCP transport starts answering the handshake immediately instead of
+# looking hung/offline to the client for the whole duration; tool calls
+# block on the _get_*() accessors below until it's ready.
+_client: ShellClient | None = None
+_search: SearchClient | None = None
+_fetch: FetchClient | None = None
+_client_ready = threading.Event()
+_client_error: Exception | None = None
+
+
+def _bring_up_vm():
+    global _client, _search, _fetch, _client_error
+    try:
+        conn = _vm.ensure_running()
+        _client = ShellClient(host=conn["ssh_host"], port=conn["ssh_port"])
+        searxng_url = os.environ.get("SEARXNG_URL") or conn["searxng_url"]
+        _search = SearchClient(searxng_url, timeout=SEARXNG_TIMEOUT)
+        _fetch = FetchClient(_client, timeout=FETCH_TIMEOUT, proxies=FETCH_PROXIES or None)
+    except Exception as exc:
+        _client_error = exc
+    finally:
+        _client_ready.set()
+
+
+threading.Thread(target=_bring_up_vm, daemon=True, name="vm-bringup").start()
+
+
+def _wait_ready() -> None:
+    _client_ready.wait()
+    if _client_error is not None:
+        raise RuntimeError(f"Sandbox failed to start: {_client_error}")
+
+
+def _get_client() -> ShellClient:
+    """Block until the sandbox VM is ready, then return the shell client.
+
+    Only tool calls wait here — the MCP transport itself starts responding
+    to the protocol handshake right away, without waiting on the VM.
+    """
+    _wait_ready()
+    return _client
+
+
+def _get_search() -> SearchClient:
+    _wait_ready()
+    return _search
+
+
+def _get_fetch() -> FetchClient:
+    _wait_ready()
+    return _fetch
+
+
+_file_server = FileServer()
 
 mcp = FastMCP("webshell")
 
@@ -56,7 +105,7 @@ def execute_command(command: str) -> dict:
     Returns:
         Dict with stdout (str), stderr (str), and exit_code (int).
     """
-    return _client.execute(command)
+    return _get_client().execute(command)
 
 
 @mcp.tool
@@ -69,7 +118,7 @@ def list_directory(path: str = "~") -> list[dict]:
     Returns:
         List of file entries with name, size, is_dir, permissions, and modified.
     """
-    return _client.list_remote(path)
+    return _get_client().list_remote(path)
 
 
 @mcp.tool
@@ -82,7 +131,7 @@ def read_file(path: str) -> str:
     Returns:
         File contents as a string.
     """
-    return _client.read_remote(path)
+    return _get_client().read_remote(path)
 
 
 @mcp.tool
@@ -99,7 +148,7 @@ def write_file(path: str, content: str) -> dict:
     Returns:
         Dict with path (str) and size (int).
     """
-    return _client.write_remote(path, content)
+    return _get_client().write_remote(path, content)
 
 
 @mcp.tool
@@ -116,7 +165,7 @@ def upload_file(local_path: str, remote_path: str) -> dict:
     Returns:
         Dict with remote_path (str) and size (int).
     """
-    return _client.upload(local_path, remote_path)
+    return _get_client().upload(local_path, remote_path)
 
 
 @mcp.tool
@@ -133,7 +182,7 @@ def download_file(remote_path: str, local_path: str) -> dict:
     Returns:
         Dict with local_path (str) and size (int).
     """
-    return _client.download(remote_path, local_path)
+    return _get_client().download(remote_path, local_path)
 
 
 @mcp.tool
@@ -143,7 +192,7 @@ def get_system_info() -> dict:
     Returns:
         Dict with system information fields.
     """
-    return _client.system_info()
+    return _get_client().system_info()
 
 
 @mcp.tool
@@ -162,7 +211,7 @@ def fetch_file(remote_path: str) -> dict:
     """
     filename = os.path.basename(remote_path)
     local_path = str(_file_server.files_dir / filename)
-    result = _client.download(remote_path, local_path)
+    result = _get_client().download(remote_path, local_path)
     return _file_server.register(local_path, filename, result["size"])
 
 
@@ -194,7 +243,7 @@ def web_search(
     Returns:
         List of search results with title, url, content, engine, and score.
     """
-    return _search.search(
+    return _get_search().search(
         query,
         categories=categories,
         language=language,
@@ -224,7 +273,7 @@ def news_search(
     Returns:
         List of news results.
     """
-    return _search.search(
+    return _get_search().search(
         query,
         categories="news",
         language=language,
@@ -249,7 +298,7 @@ def fetch_url(
     Returns:
         Dict with url, title, and content.
     """
-    return _fetch.fetch(
+    return _get_fetch().fetch(
         url,
         output_format=output_format,
         include_links=include_links,
@@ -276,7 +325,7 @@ def scrape_url(
     Returns:
         Dict with url, title, and content.
     """
-    return _fetch.scrape(
+    return _get_fetch().scrape(
         url,
         output_format=output_format,
         include_links=include_links,

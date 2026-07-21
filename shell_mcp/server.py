@@ -2,6 +2,7 @@ import atexit
 import os
 import signal
 import sys
+import threading
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
@@ -12,9 +13,6 @@ from shell_client.vm_manager import VMManager
 load_dotenv()
 
 _vm = VMManager()
-_conn = _vm.ensure_running()
-_client = ShellClient(host=_conn["ssh_host"], port=_conn["ssh_port"])
-_file_server = FileServer()
 atexit.register(_vm.stop_vm)
 
 
@@ -23,6 +21,44 @@ def _handle_signal(signum, frame):
 
 
 signal.signal(signal.SIGTERM, _handle_signal)
+
+# VM bring-up (create/restore/boot/wait-for-SSH) can take anywhere from
+# seconds to tens of minutes. Do it on a background thread so the MCP
+# transport starts answering the handshake immediately instead of looking
+# hung/offline to the client for the whole duration; tool calls block on
+# _get_client() until it's ready.
+_client: ShellClient | None = None
+_client_ready = threading.Event()
+_client_error: Exception | None = None
+
+
+def _bring_up_vm():
+    global _client, _client_error
+    try:
+        conn = _vm.ensure_running()
+        _client = ShellClient(host=conn["ssh_host"], port=conn["ssh_port"])
+    except Exception as exc:
+        _client_error = exc
+    finally:
+        _client_ready.set()
+
+
+threading.Thread(target=_bring_up_vm, daemon=True, name="vm-bringup").start()
+
+
+def _get_client() -> ShellClient:
+    """Block until the sandbox VM is ready, then return the shell client.
+
+    Only tool calls wait here — the MCP transport itself starts responding
+    to the protocol handshake right away, without waiting on the VM.
+    """
+    _client_ready.wait()
+    if _client_error is not None:
+        raise RuntimeError(f"Sandbox failed to start: {_client_error}")
+    return _client
+
+
+_file_server = FileServer()
 
 mcp = FastMCP("shell")
 
@@ -43,7 +79,7 @@ def execute_command(command: str) -> dict:
     Returns:
         Dict with stdout (str), stderr (str), and exit_code (int).
     """
-    return _client.execute(command)
+    return _get_client().execute(command)
 
 
 @mcp.tool
@@ -56,7 +92,7 @@ def list_directory(path: str = "~") -> list[dict]:
     Returns:
         List of file entries with name, size, is_dir, permissions, and modified.
     """
-    return _client.list_remote(path)
+    return _get_client().list_remote(path)
 
 
 @mcp.tool
@@ -69,7 +105,7 @@ def read_file(path: str) -> str:
     Returns:
         File contents as a string.
     """
-    return _client.read_remote(path)
+    return _get_client().read_remote(path)
 
 
 @mcp.tool
@@ -86,7 +122,7 @@ def write_file(path: str, content: str) -> dict:
     Returns:
         Dict with path (str) and size (int).
     """
-    return _client.write_remote(path, content)
+    return _get_client().write_remote(path, content)
 
 
 @mcp.tool
@@ -103,7 +139,7 @@ def upload_file(local_path: str, remote_path: str) -> dict:
     Returns:
         Dict with remote_path (str) and size (int).
     """
-    return _client.upload(local_path, remote_path)
+    return _get_client().upload(local_path, remote_path)
 
 
 @mcp.tool
@@ -120,7 +156,7 @@ def download_file(remote_path: str, local_path: str) -> dict:
     Returns:
         Dict with local_path (str) and size (int).
     """
-    return _client.download(remote_path, local_path)
+    return _get_client().download(remote_path, local_path)
 
 
 @mcp.tool
@@ -130,7 +166,7 @@ def get_system_info() -> dict:
     Returns:
         Dict with system information fields.
     """
-    return _client.system_info()
+    return _get_client().system_info()
 
 
 @mcp.tool
@@ -149,7 +185,7 @@ def fetch_file(remote_path: str) -> dict:
     """
     filename = os.path.basename(remote_path)
     local_path = str(_file_server.files_dir / filename)
-    result = _client.download(remote_path, local_path)
+    result = _get_client().download(remote_path, local_path)
     return _file_server.register(local_path, filename, result["size"])
 
 

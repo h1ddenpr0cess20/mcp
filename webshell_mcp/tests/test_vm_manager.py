@@ -287,25 +287,69 @@ class TestEnsureRunningNoVbox:
 # ---------------------------------------------------------------------------
 
 class TestEnsureRunningVmRunning:
-    def test_returns_localhost_2223_for_nat(self, monkeypatch):
+    def test_reuses_vm_when_ssh_already_reachable(self, monkeypatch):
+        """A running VM with SSH already up skips restore/reboot entirely."""
         vm = _vm(monkeypatch, NETWORK_MODE="nat")
 
-        vm_list_output = '"test-webshell" {abc}'
-        vm_state_output = 'VMState="running"\n'
+        with patch("shutil.which", return_value="/usr/bin/vboxmanage"), \
+                patch.object(vm, "vm_exists", return_value=True), \
+                patch.object(vm, "vm_state", return_value="running"), \
+                patch.object(vm, "_quick_ssh_probe", return_value="127.0.0.1") as mock_probe, \
+                patch.object(vm, "restore_clean") as mock_restore, \
+                patch.object(vm, "start_vm") as mock_start, \
+                patch.object(vm, "wait_for_ssh") as mock_wait:
+            result = vm.ensure_running()
 
-        with patch("shutil.which", return_value="/usr/bin/vboxmanage"):
-            with patch("subprocess.run", side_effect=[
-                _completed(0, vm_list_output),   # vm_exists -> list vms
-                _completed(0, vm_state_output),  # vm_state -> showvminfo
-                _completed(0, 'SnapshotName="clean-base"'),  # _snapshot_exists
-                _completed(0),                   # controlvm poweroff (restore_clean)
-                _completed(0),                   # snapshot restore
-                _completed(0, 'VMState="poweroff"\n'),  # start_vm -> vm_state
-                _completed(0),                   # startvm
-                _completed(0, "ok"),             # wait_for_ssh -> ssh
-            ]):
-                result = vm.ensure_running()
-
+        mock_probe.assert_called_once()
+        mock_restore.assert_not_called()
+        mock_start.assert_not_called()
+        mock_wait.assert_not_called()
         assert result["ssh_host"] == "127.0.0.1"
         assert result["ssh_port"] == 2223
         assert result["searxng_url"] == "http://127.0.0.1:8889"
+
+    def test_falls_back_to_restore_when_quick_probe_fails(self, monkeypatch):
+        """A running VM whose SSH doesn't answer falls back to the full
+        restore/reboot/wait cycle, same as before this fast path existed."""
+        vm = _vm(monkeypatch, NETWORK_MODE="nat")
+
+        with patch("shutil.which", return_value="/usr/bin/vboxmanage"), \
+                patch.object(vm, "vm_exists", return_value=True), \
+                patch.object(vm, "vm_state", return_value="running"), \
+                patch.object(vm, "_quick_ssh_probe", return_value=None) as mock_probe, \
+                patch.object(vm, "_snapshot_exists", return_value=True), \
+                patch.object(vm, "restore_clean") as mock_restore, \
+                patch.object(vm, "start_vm") as mock_start, \
+                patch.object(vm, "wait_for_ssh", return_value="127.0.0.1") as mock_wait:
+            result = vm.ensure_running()
+
+        mock_probe.assert_called_once()
+        mock_restore.assert_called_once()
+        mock_start.assert_called_once()
+        mock_wait.assert_called_once_with(timeout=120)
+        assert result["ssh_host"] == "127.0.0.1"
+        assert result["ssh_port"] == 2223
+        assert result["searxng_url"] == "http://127.0.0.1:8889"
+
+
+# ---------------------------------------------------------------------------
+# _quick_ssh_probe
+# ---------------------------------------------------------------------------
+
+class TestQuickSshProbe:
+    def test_returns_host_when_ssh_succeeds(self, monkeypatch):
+        vm = _vm(monkeypatch, NETWORK_MODE="nat")
+        with patch("subprocess.run", return_value=_completed(0, "ok")) as mock_run:
+            assert vm._quick_ssh_probe() == "127.0.0.1"
+        called_args = mock_run.call_args[0][0]
+        assert called_args[0] == "ssh"
+
+    def test_returns_none_when_ssh_fails(self, monkeypatch):
+        vm = _vm(monkeypatch, NETWORK_MODE="nat")
+        with patch("subprocess.run", return_value=_completed(255, "")):
+            assert vm._quick_ssh_probe() is None
+
+    def test_returns_none_when_hostonly_ip_undetected(self, monkeypatch):
+        vm = _vm(monkeypatch, NETWORK_MODE="hostonly")
+        with patch.object(vm, "_hostonly_vm_ip", return_value=None):
+            assert vm._quick_ssh_probe() is None
