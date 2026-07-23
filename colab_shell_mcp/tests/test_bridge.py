@@ -63,6 +63,13 @@ def test_exec_runs_command(running_bridge):
     assert body["exit_code"] == 0
 
 
+def test_main_rejects_short_token(monkeypatch):
+    monkeypatch.setenv("COLAB_BRIDGE_TOKEN", "short")
+    with pytest.raises(SystemExit) as exc:
+        bridge.main()
+    assert "too short" in str(exc.value)
+
+
 def test_write_then_read_roundtrips(tmp_path, running_bridge):
     target = str(tmp_path / "file.bin")
     payload = {"path": target, "content_b64": base64.b64encode(b"data").decode()}

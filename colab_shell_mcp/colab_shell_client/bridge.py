@@ -35,6 +35,12 @@ except ImportError:  # pragma: no cover - standalone execution fallback
 
 VERSION = "0.1.0"
 MAX_BODY_BYTES = 256 * 1024 * 1024
+# A bridge endpoint is a remote-shell into the Colab VM. When it is reachable
+# from anywhere but loopback (i.e. behind a tunnel), the bearer token is the
+# only thing standing between the internet and arbitrary command execution, so
+# reject anything a brute-force could realistically reach.
+MIN_TOKEN_LENGTH = 16
+LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 def _make_handler(token: str, command_timeout: int):
@@ -126,10 +132,30 @@ def main() -> None:
     if not token:
         token = secrets.token_urlsafe(24)
         # Printed so the notebook can capture it and hand it to the MCP server.
+        # Anything that lands in shared notebook output leaks this token, so
+        # keep saved copies of the notebook output-free (Edit > Clear all
+        # outputs before sharing) and rotate the token if it may have leaked.
         print(f"COLAB_BRIDGE_TOKEN={token}", flush=True)
+    elif len(token) < MIN_TOKEN_LENGTH:
+        raise SystemExit(
+            f"COLAB_BRIDGE_TOKEN is too short ({len(token)} chars); use at least "
+            f"{MIN_TOKEN_LENGTH}. Generate a strong one with "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(24))\"` "
+            "or leave it unset to auto-generate."
+        )
 
     handler = _make_handler(token, command_timeout)
     server = ThreadingHTTPServer((host, port), handler)
+    if host not in LOOPBACK_HOSTS:
+        # Binding beyond loopback (or fronting loopback with a public tunnel)
+        # exposes an authenticated remote shell. Make the blast radius explicit.
+        print(
+            f"WARNING: bridge bound to {host} — this is a remote shell into the "
+            "Colab VM. Anyone with the URL and token can run arbitrary commands "
+            "here. Do not mount Google Drive or run authenticate_user() in a "
+            "runtime you expose this way.",
+            flush=True,
+        )
     print(f"colab-shell-bridge v{VERSION} listening on http://{host}:{port}", flush=True)
     try:
         server.serve_forever()

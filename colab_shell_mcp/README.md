@@ -101,6 +101,31 @@ Copy `.env.example` to `.env`. Common settings:
 - `colab_shell_client/file_server.py` — local HTTP server for `fetch_file`
 - `server.py` — FastMCP tool definitions
 
+## Security
+
+The `remote` backend puts an **authenticated remote shell** on a public tunnel.
+Treat it accordingly:
+
+- **The Colab VM is not your Google account, but it can reach what you connect
+  to it.** Arbitrary commands can't touch your password or account settings, but
+  they *can* read/write/delete anything you've mounted or authenticated into the
+  runtime. **Do not run `drive.mount(...)` or `google.colab.auth.authenticate_user()`
+  in a runtime you expose** — a leaked token would then reach your Drive files or
+  GCP credentials.
+- **The bearer token is the only thing protecting the tunnel.** It has no expiry
+  and no rate limit, so keep it secret: the bridge prints it to cell output, so
+  clear notebook outputs before saving or sharing (Edit → Clear all outputs), and
+  rotate the token (restart the bridge) if it may have leaked. The bridge refuses
+  tokens shorter than 16 characters.
+- **Treat the tunnel URL as public.** Quick-tunnel URLs are guessable-adjacent and
+  unauthenticated at the network layer; only the token gates access.
+- **Abuse risks your Colab access.** A publicly reachable runtime that runs
+  arbitrary commands is exactly what Google's terms flag as abuse. If a leaked
+  token is used for mining or similar, Google can suspend Colab for the account.
+- **Prefer the `local` backend** (server and chatbot both inside Colab, no public
+  tunnel) whenever you don't specifically need a cloud provider to dial in — it
+  avoids the public exposure entirely.
+
 ## Notes
 
 - The bridge is standard-library only on purpose: a fresh Colab kernel has no
