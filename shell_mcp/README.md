@@ -36,8 +36,15 @@ Copy `.env.example` to `.env` and fill in values.
 | `SSH_USER` | *(required)* | SSH username |
 | `SSH_KEY_PATH` | *(none)* | Path to private key (preferred) |
 | `SSH_PASSWORD` | *(none)* | Password fallback if no key |
-| `SSH_KNOWN_HOSTS` | *(system)* | known_hosts file to verify the server against |
-| `SSH_AUTO_ADD_HOST_KEYS` | `false` | Accept unknown host keys (only for the throwaway managed VM) |
+| `SSH_KNOWN_HOSTS` | `~/.shell_mcp/known_hosts` | known_hosts file the server is verified against, in addition to the system one |
+
+Unknown SSH host keys are rejected. `VMManager` pins the managed VM's key into
+`SSH_KNOWN_HOSTS` as soon as the VM answers SSH, so that path needs no setup.
+When pointing at an existing host instead, add its key first:
+
+```sh
+ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+```
 | `SSH_TIMEOUT` | `10` | Connection timeout (seconds) |
 | `COMMAND_TIMEOUT` | `30` | Per-command timeout (seconds) |
 

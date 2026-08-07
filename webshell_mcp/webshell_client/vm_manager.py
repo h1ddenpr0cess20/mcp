@@ -123,6 +123,9 @@ class VMManager:
         self.ssh_port = int(os.getenv("SSH_PORT", "22"))
         self.searxng_port = int(os.getenv("SEARXNG_PORT", "8889"))
         self.vm_sudo = os.getenv("VM_SUDO", "false").lower() in ("1", "true", "yes")
+        self.known_hosts_path = os.path.expanduser(
+            os.getenv("SSH_KNOWN_HOSTS", "~/.webshell_mcp/known_hosts")
+        )
 
     def _run(self, *args, check=True, capture=True) -> subprocess.CompletedProcess:
         result = subprocess.run(
@@ -759,6 +762,56 @@ class VMManager:
 
         raise TimeoutError(f"SSH not reachable after {timeout}s")
 
+    def record_host_key(self, host: str, port: int) -> str | None:
+        """Pin the VM's SSH host key so clients never have to trust on first use.
+
+        Called once the VM answers SSH. The key is captured here, while we are
+        talking to a VM we just built on this machine, so ``ShellClient`` can
+        reject an unknown key instead of accepting whatever it is offered.
+
+        Args:
+            host: Address the VM answered SSH on.
+            port: SSH port the VM answered on.
+
+        Returns:
+            Path to the known_hosts file, or None if the key could not be read.
+        """
+        if not shutil.which("ssh-keyscan"):
+            self._log("ssh-keyscan not found -- cannot pin the VM host key")
+            return None
+
+        try:
+            result = self._run("ssh-keyscan", "-p", str(port), host, check=False)
+        except OSError as exc:
+            # Pinning is part of start-up; never let it take the VM down with it.
+            self._log(f"ssh-keyscan failed ({exc}) -- host key not pinned")
+            return None
+        scanned = [
+            line for line in (result.stdout or "").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        if not scanned:
+            self._log(f"No host key offered by {host}:{port} -- not pinned")
+            return None
+
+        path = self.known_hosts_path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # The VM is issued a new host key on every rebuild, so a stale entry
+        # for this address has to go before the current one is written.
+        stale = {host, f"[{host}]:{port}"}
+        kept: list[str] = []
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as handle:
+                kept = [
+                    line.rstrip("\n") for line in handle
+                    if line.split(" ", 1)[0] not in stale
+                ]
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join([*kept, *scanned]) + "\n")
+        os.chmod(path, 0o600)
+        self._log(f"Pinned VM host key in {path}")
+        return path
+
     def stop_vm(self):
         """Power off the VM if it is running."""
         if not shutil.which("vboxmanage"):
@@ -776,9 +829,12 @@ class VMManager:
         if not shutil.which("vboxmanage"):
             self._log("VirtualBox not found — assuming external SSH target")
             searxng_host = self.ssh_host
+            # Not our VM, so its key is not ours to pin; it has to already
+            # be in the caller's known_hosts.
             return {
                 "ssh_host": self.ssh_host,
                 "ssh_port": self.ssh_port,
+                "known_hosts": None,
                 "searxng_url": f"http://{searxng_host}:{self.searxng_port}",
             }
 
@@ -825,5 +881,6 @@ class VMManager:
         return {
             "ssh_host": host,
             "ssh_port": port,
+            "known_hosts": self.record_host_key(host, port),
             "searxng_url": f"http://{searxng_host}:{self.searxng_port}",
         }

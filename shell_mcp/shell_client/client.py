@@ -11,16 +11,16 @@ class ShellClient:
         self,
         host: str | None = None,
         port: int | None = None,
+        known_hosts: str | None = None,
     ):
         self.host = host or os.getenv("SSH_HOST")
         self.port = port or int(os.getenv("SSH_PORT", "22"))
         self.user = os.getenv("SSH_USER")
         self.key_path = os.getenv("SSH_KEY_PATH")
         self.password = os.getenv("SSH_PASSWORD")
-        self.known_hosts = os.getenv("SSH_KNOWN_HOSTS")
-        self.auto_add_host_keys = os.getenv(
-            "SSH_AUTO_ADD_HOST_KEYS", ""
-        ).strip().lower() in ("1", "true", "yes")
+        self.known_hosts = os.path.expanduser(
+            known_hosts or os.getenv("SSH_KNOWN_HOSTS", "~/.shell_mcp/known_hosts")
+        )
         self.timeout = int(os.getenv("SSH_TIMEOUT", "10"))
         self.command_timeout = int(os.getenv("COMMAND_TIMEOUT", "1200"))
         self._client: paramiko.SSHClient | None = None
@@ -28,19 +28,14 @@ class ShellClient:
     def connect(self):
         """Establish SSH connection to the remote host."""
         self._client = paramiko.SSHClient()
-        if self.known_hosts:
-            self._client.load_host_keys(os.path.expanduser(self.known_hosts))
-        else:
-            self._client.load_system_host_keys()
-        if self.auto_add_host_keys:
-            # Opt-in only. The managed VirtualBox VM gets a fresh host key on
-            # every rebuild, so pinning it is impractical there; for any other
-            # host leave SSH_AUTO_ADD_HOST_KEYS unset and the connection is
-            # rejected unless the key is already known.
-            # codeql[py/paramiko-missing-host-key-validation]
-            self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        else:
-            self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        self._client.load_system_host_keys()
+        if os.path.isfile(self.known_hosts):
+            self._client.load_host_keys(self.known_hosts)
+        # An unknown host key is always a failure. The managed VM's key is
+        # pinned by VMManager.record_host_key while the VM is being built, so
+        # there is no first-contact gap to cover; any other target has to be
+        # in the system known_hosts or in SSH_KNOWN_HOSTS already.
+        self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
         kwargs = dict(
             hostname=self.host,
             port=self.port,

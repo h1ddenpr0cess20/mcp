@@ -12,7 +12,7 @@ python webshell_mcp/server.py
 
 The server runs on HTTP transport at `127.0.0.1:9710` by default. On first run with VirtualBox installed, the VM is created and provisioned automatically (10-20 minutes). Subsequent starts restore a versioned, validated toolchain snapshot and are ready in under two minutes.
 
-> **No VirtualBox?** Set `SSH_HOST`, `SSH_USER`, and `SSH_KEY_PATH` in a `.env` file to point at any existing Linux host that has SearXNG, curl_cffi, trafilatura, and Playwright installed.
+> **No VirtualBox?** Set `SSH_HOST`, `SSH_USER`, and `SSH_KEY_PATH` in a `.env` file to point at any existing Linux host that has SearXNG, curl_cffi, trafilatura, and Playwright installed. Unknown host keys are rejected, so add the host's key first with `ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts`.
 
 ## Tools
 
@@ -41,8 +41,10 @@ Copy `.env.example` to `.env` and fill in values.
 | `SSH_USER` | *(required)* | SSH username |
 | `SSH_KEY_PATH` | *(none)* | Path to private key (preferred) |
 | `SSH_PASSWORD` | *(none)* | Password fallback if no key |
-| `SSH_KNOWN_HOSTS` | *(system)* | known_hosts file to verify the server against |
-| `SSH_AUTO_ADD_HOST_KEYS` | `false` | Accept unknown host keys (only for the throwaway managed VM) |
+| `SSH_KNOWN_HOSTS` | `~/.webshell_mcp/known_hosts` | known_hosts file the server is verified against, in addition to the system one |
+
+Unknown SSH host keys are rejected. `VMManager` pins the managed VM's key into
+`SSH_KNOWN_HOSTS` as soon as the VM answers SSH, so that path needs no setup.
 | `SSH_TIMEOUT` | `10` | Connection timeout (seconds) |
 | `COMMAND_TIMEOUT` | `30` | Per-command timeout (seconds) |
 

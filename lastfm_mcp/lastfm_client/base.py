@@ -52,7 +52,6 @@ class LastfmAPIBase:
         # MD5 is not a choice here: the Last.fm API defines api_sig as the
         # MD5 of the sorted parameter string plus the shared secret, and the
         # server rejects anything else. The secret is never transmitted.
-        # codeql[py/weak-sensitive-data-hashing]
         return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
     def _request(self, method: str, params: Dict[str, Any], http_method: str = "GET"):

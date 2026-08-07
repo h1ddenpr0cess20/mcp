@@ -70,7 +70,6 @@ def list_directory(path: str = "~") -> list[dict]:
     resolved = resolve_path(path)
     entries: list[dict] = []
     # Unrestricted paths are intentional here; see resolve_path.
-    # codeql[py/path-injection]
     with os.scandir(resolved) as it:
         for entry in it:
             try:
@@ -94,7 +93,6 @@ def read_bytes(path: str) -> dict:
     """Read a file's raw bytes. Returns ``{data, size}``."""
     resolved = resolve_path(path)
     # Unrestricted paths are intentional here; see resolve_path.
-    # codeql[py/path-injection]
     with open(resolved, "rb") as handle:
         data = handle.read()
     return {"data": data, "size": len(data)}
@@ -104,7 +102,6 @@ def write_bytes(path: str, data: bytes) -> dict:
     """Write raw bytes to a file, creating or overwriting it. Returns ``{path, size}``."""
     resolved = resolve_path(path)
     # Unrestricted paths are intentional here; see resolve_path.
-    # codeql[py/path-injection]
     with open(resolved, "wb") as handle:
         handle.write(data)
     return {"path": resolved, "size": len(data)}
