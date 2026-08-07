@@ -1,6 +1,5 @@
 import os
 
-import pytest
 from PIL import Image as PILImage
 
 from firetv_client.client import ADBClient

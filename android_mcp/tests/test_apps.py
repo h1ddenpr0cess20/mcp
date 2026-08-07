@@ -1,4 +1,3 @@
-import pytest
 
 from android_client.apps import AppManager
 from android_client.client import ADBClient
@@ -55,7 +54,7 @@ class TestUninstallApp:
         mock_result.returncode = 0
 
         apps = _make_apps(monkeypatch, mock_subprocess_run)
-        result = apps.uninstall_app("com.example.app")
+        apps.uninstall_app("com.example.app")
 
         mock_run.assert_called_once_with(
             ["adb", "uninstall", "com.example.app"],

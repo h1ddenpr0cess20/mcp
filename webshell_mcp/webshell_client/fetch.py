@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, Optional
+from typing import Dict
 
 from .client import ShellClient
 

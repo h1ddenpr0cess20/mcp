@@ -1,4 +1,3 @@
-import requests
 
 from .album import AlbumAPI
 from .artist import ArtistAPI

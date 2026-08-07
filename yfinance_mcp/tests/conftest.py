@@ -1,9 +1,8 @@
 import pytest
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, MagicMock
 import pandas as pd
 
 from yfinance_client import (
-    YFinanceClient,
     ChartAPI,
     NewsAPI,
     OptionsAPI,

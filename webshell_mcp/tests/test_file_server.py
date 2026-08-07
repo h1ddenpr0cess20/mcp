@@ -151,7 +151,7 @@ class TestHTTPServing:
 class TestFileServerInit:
     def test_creates_files_dir(self, tmp_path):
         files_dir = tmp_path / "subdir" / "files"
-        server = FileServer(files_dir=str(files_dir), host="127.0.0.1", port=0)
+        FileServer(files_dir=str(files_dir), host="127.0.0.1", port=0)
         assert files_dir.exists()
 
     def test_defaults_from_env(self, monkeypatch, tmp_path):

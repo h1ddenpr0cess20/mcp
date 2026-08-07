@@ -1,6 +1,5 @@
 import os
 
-import pytest
 from PIL import Image as PILImage
 
 from android_client.client import ADBClient
@@ -205,7 +204,7 @@ class TestWakeScreen:
         mock_run.side_effect = side_effect
 
         screen = _make_screen(monkeypatch, mock_subprocess_run, tmp_path)
-        result = screen.wake_screen()
+        screen.wake_screen()
 
         assert mock_run.call_count == 2
         second_args = mock_run.call_args_list[1][0][0]

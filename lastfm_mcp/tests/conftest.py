@@ -3,7 +3,6 @@ import pytest
 from unittest.mock import Mock, patch
 
 from lastfm_client import (
-    LastfmClient,
     LastfmAPIBase,
     AlbumAPI,
     ArtistAPI,
