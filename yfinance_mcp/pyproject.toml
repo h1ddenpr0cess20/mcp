@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FastMCP server for Yahoo Finance data via yfinance."
 requires-python = ">=3.9"
 dependencies = [
-    "fastmcp>=2.0",
+    "fastmcp>=3.4.5",
     "yfinance>=0.2.40",
 ]
 
