@@ -1,6 +1,6 @@
 FROM node:25-slim AS node
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
