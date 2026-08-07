@@ -129,16 +129,26 @@ class FileServer:
 
                 # /<filename>  (legacy direct path)
                 else:
-                    filename = os.path.basename(path)
-                    local_path = str(files_dir / filename)
+                    # Confine the lookup to files_dir: normalise the candidate
+                    # first, then require it to sit under the served directory
+                    # so a crafted path cannot escape it.
+                    base_dir = os.path.realpath(str(files_dir))
+                    local_path = os.path.realpath(
+                        os.path.join(base_dir, os.path.basename(path))
+                    )
+                    if not local_path.startswith(base_dir + os.sep):
+                        self.send_error(404)
+                        return
                     if not os.path.exists(local_path):
                         self.send_error(404)
                         return
-                    mime_type, _ = mimetypes.guess_type(filename)
+                    mime_type, _ = mimetypes.guess_type(local_path)
+                    # A CR/LF in a header value would let the response be split.
+                    content_type = (mime_type or "application/octet-stream").replace("\r", "").replace("\n", "")
                     with open(local_path, "rb") as f:
                         data = f.read()
                     self.send_response(200)
-                    self.send_header("Content-Type", mime_type or "application/octet-stream")
+                    self.send_header("Content-Type", content_type)
                     self.send_header("Content-Length", str(len(data)))
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
@@ -149,6 +159,8 @@ class FileServer:
 
         self._server = HTTPServer((self.host, self.port), _Handler)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        # TLS 1.0/1.1 are still enabled by default in some builds; refuse them.
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(cert_path, key_path)
         self._server.socket = ctx.wrap_socket(self._server.socket, server_side=True)
         thread = threading.Thread(target=self._server.serve_forever, daemon=True)

@@ -121,7 +121,7 @@ class TestOpenUrl:
 
         args = mock_run.call_args[0][0]
         assert "am start" in args[2]
-        assert "https://example.com" in args[2]
+        assert args[2].endswith("-d 'https://example.com'")
 
 
 class TestSideload:

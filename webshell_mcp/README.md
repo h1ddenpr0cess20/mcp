@@ -41,6 +41,8 @@ Copy `.env.example` to `.env` and fill in values.
 | `SSH_USER` | *(required)* | SSH username |
 | `SSH_KEY_PATH` | *(none)* | Path to private key (preferred) |
 | `SSH_PASSWORD` | *(none)* | Password fallback if no key |
+| `SSH_KNOWN_HOSTS` | *(system)* | known_hosts file to verify the server against |
+| `SSH_AUTO_ADD_HOST_KEYS` | `false` | Accept unknown host keys (only for the throwaway managed VM) |
 | `SSH_TIMEOUT` | `10` | Connection timeout (seconds) |
 | `COMMAND_TIMEOUT` | `30` | Per-command timeout (seconds) |
 

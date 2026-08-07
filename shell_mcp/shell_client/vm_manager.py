@@ -50,7 +50,7 @@ def _apt_toolchain_lines() -> list[str]:
         "  apt_retry install -y --no-install-recommends \"$@\" && return 0",
         "  echo 'Package group failed; retrying packages individually' >&2",
         "  for package in \"$@\"; do",
-        "    apt_retry install -y --no-install-recommends \"$package\" || "
+        "    apt_retry install -y --no-install-recommends \"$package\" || " +
         "echo \"WARNING: package $package is unavailable\" >&2",
         "  done",
         "}",
@@ -341,19 +341,19 @@ class VMManager:
             "mkdir -p /etc/pip.conf.d",
             "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
             # Ensure pip3 is available — apt install may have silently failed
-            "command -v pip3 || apt-get install -y python3-pip || "
+            "command -v pip3 || apt-get install -y python3-pip || " +
             "(curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && python3 /tmp/get-pip.py) || true",
             # --- Document / office Python libraries ---
-            "pip3 install -q python-docx pdfplumber pypdf reportlab weasyprint "
-            "openpyxl pandas xlrd csvkit python-pptx beautifulsoup4 lxml "
+            "pip3 install -q python-docx pdfplumber pypdf reportlab weasyprint " +
+            "openpyxl pandas xlrd csvkit python-pptx beautifulsoup4 lxml " +
             "pillow cairosvg ebooklib pytesseract pdf2image || true",
             # --- HTTP / network ---
             "pip3 install -q requests httpx aiohttp paramiko fabric || true",
             # --- CLI / output ---
             "pip3 install -q click rich typer tqdm loguru || true",
             # --- Data / config ---
-            "pip3 install -q pydantic pyyaml toml python-dotenv jinja2 "
-            "arrow pendulum humanize tabulate orjson msgpack "
+            "pip3 install -q pydantic pyyaml toml python-dotenv jinja2 " +
+            "arrow pendulum humanize tabulate orjson msgpack " +
             "chardet python-magic dateparser rapidfuzz || true",
             # --- Scheduling / task queues ---
             "pip3 install -q tenacity schedule celery || true",
@@ -368,10 +368,10 @@ class VMManager:
             # --- Security ---
             "pip3 install -q cryptography || true",
             # --- Dev tools ---
-            "pip3 install -q psutil gitpython pygments uv black ruff mypy "
+            "pip3 install -q psutil gitpython pygments uv black ruff mypy " +
             "pytest hypothesis watchdog || true",
             # --- Cloud / infra SDKs ---
-            "pip3 install -q docker kubernetes boto3 "
+            "pip3 install -q docker kubernetes boto3 " +
             "google-cloud-storage azure-storage-blob || true",
             # Small, high-value JavaScript authoring toolchain.
             "npm install --global typescript tsx eslint prettier || true",
@@ -382,7 +382,7 @@ class VMManager:
             "  command -v \"$command\" >/dev/null 2>&1 || missing=\"$missing $command\"",
             "done",
             "[ -z \"$missing\" ] || { echo \"Missing required tools:$missing\" >&2; exit 1; }",
-            "python3 -c 'import docx, openpyxl, pptx, pypdf, reportlab' || "
+            "python3 -c 'import docx, openpyxl, pptx, pypdf, reportlab' || " +
             "{ echo 'Missing required document Python libraries' >&2; exit 1; }",
             f"mkdir -p {os.path.dirname(TOOLCHAIN_MARKER)}",
             f"touch {TOOLCHAIN_MARKER}",

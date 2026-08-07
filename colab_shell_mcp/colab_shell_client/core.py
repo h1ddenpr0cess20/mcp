@@ -20,7 +20,13 @@ DEFAULT_COMMAND_TIMEOUT = 1200
 
 
 def resolve_path(path: str) -> str:
-    """Expand ``~`` and ``~user`` against the Colab runtime's home directory."""
+    """Expand ``~`` and ``~user`` against the Colab runtime's home directory.
+
+    Deliberately does not confine the result to a sandbox root. This module
+    exists to hand an authenticated operator the Colab runtime's own shell,
+    and :func:`run_command` already grants strictly more access than any
+    file read or write below, so a path allowlist here would buy nothing.
+    """
     if path in ("", "~"):
         return os.path.expanduser("~")
     return os.path.expanduser(path)
@@ -63,6 +69,8 @@ def list_directory(path: str = "~") -> list[dict]:
     """List one directory level with name, size, is_dir, permissions, modified."""
     resolved = resolve_path(path)
     entries: list[dict] = []
+    # Unrestricted paths are intentional here; see resolve_path.
+    # codeql[py/path-injection]
     with os.scandir(resolved) as it:
         for entry in it:
             try:
@@ -85,6 +93,8 @@ def list_directory(path: str = "~") -> list[dict]:
 def read_bytes(path: str) -> dict:
     """Read a file's raw bytes. Returns ``{data, size}``."""
     resolved = resolve_path(path)
+    # Unrestricted paths are intentional here; see resolve_path.
+    # codeql[py/path-injection]
     with open(resolved, "rb") as handle:
         data = handle.read()
     return {"data": data, "size": len(data)}
@@ -93,6 +103,8 @@ def read_bytes(path: str) -> dict:
 def write_bytes(path: str, data: bytes) -> dict:
     """Write raw bytes to a file, creating or overwriting it. Returns ``{path, size}``."""
     resolved = resolve_path(path)
+    # Unrestricted paths are intentional here; see resolve_path.
+    # codeql[py/path-injection]
     with open(resolved, "wb") as handle:
         handle.write(data)
     return {"path": resolved, "size": len(data)}
@@ -141,6 +153,7 @@ def _memory() -> dict:
     try:
         used = f"{(int(total) - int(available)) / (1024 * 1024):.1f}Gi"
     except ValueError:
+        # /proc/meminfo held something non-numeric; ``used`` stays "unknown".
         pass
     return {
         "mem_total": to_gib("MemTotal"),
@@ -187,5 +200,6 @@ def system_info() -> dict:
             }
         )
     except OSError:
+        # Disk usage is a nice-to-have; the rest of the report still stands.
         pass
     return info
