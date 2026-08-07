@@ -49,7 +49,7 @@ def _apt_toolchain_lines() -> list[str]:
         "  apt_retry install -y --no-install-recommends \"$@\" && return 0",
         "  echo 'Package group failed; retrying packages individually' >&2",
         "  for package in \"$@\"; do",
-        "    apt_retry install -y --no-install-recommends \"$package\" || "
+        "    apt_retry install -y --no-install-recommends \"$package\" || " +
         "echo \"WARNING: package $package is unavailable\" >&2",
         "  done",
         "}",
@@ -123,6 +123,9 @@ class VMManager:
         self.ssh_port = int(os.getenv("SSH_PORT", "22"))
         self.searxng_port = int(os.getenv("SEARXNG_PORT", "8889"))
         self.vm_sudo = os.getenv("VM_SUDO", "false").lower() in ("1", "true", "yes")
+        self.known_hosts_path = os.path.expanduser(
+            os.getenv("SSH_KNOWN_HOSTS", "~/.webshell_mcp/known_hosts")
+        )
 
     def _run(self, *args, check=True, capture=True) -> subprocess.CompletedProcess:
         result = subprocess.run(
@@ -330,22 +333,22 @@ class VMManager:
             "mkdir -p /etc/pip.conf.d",
             "printf '[global]\\nbreak-system-packages = true\\n' > /etc/pip.conf",
             # Ensure pip3 is available — apt install may have silently failed
-            "command -v pip3 || apt-get install -y python3-pip || "
+            "command -v pip3 || apt-get install -y python3-pip || " +
             "(curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && python3 /tmp/get-pip.py) || true",
             # --- Web fetch dependencies ---
             "pip3 install -q curl_cffi trafilatura markdownify playwright || true",
             "python3 -m playwright install --with-deps chromium || true",
             # --- Document / office Python libraries ---
-            "pip3 install -q python-docx pdfplumber pypdf reportlab weasyprint "
-            "openpyxl pandas xlrd csvkit python-pptx beautifulsoup4 lxml "
+            "pip3 install -q python-docx pdfplumber pypdf reportlab weasyprint " +
+            "openpyxl pandas xlrd csvkit python-pptx beautifulsoup4 lxml " +
             "pillow cairosvg ebooklib pytesseract pdf2image || true",
             # --- HTTP / network ---
             "pip3 install -q requests httpx aiohttp paramiko fabric || true",
             # --- CLI / output ---
             "pip3 install -q click rich typer tqdm loguru || true",
             # --- Data / config ---
-            "pip3 install -q pydantic pyyaml toml python-dotenv jinja2 "
-            "arrow pendulum humanize tabulate orjson msgpack "
+            "pip3 install -q pydantic pyyaml toml python-dotenv jinja2 " +
+            "arrow pendulum humanize tabulate orjson msgpack " +
             "chardet python-magic dateparser rapidfuzz || true",
             # --- Scheduling / task queues ---
             "pip3 install -q tenacity schedule celery || true",
@@ -360,10 +363,10 @@ class VMManager:
             # --- Security ---
             "pip3 install -q cryptography || true",
             # --- Dev tools ---
-            "pip3 install -q psutil gitpython pygments uv black ruff mypy "
+            "pip3 install -q psutil gitpython pygments uv black ruff mypy " +
             "pytest hypothesis watchdog || true",
             # --- Cloud / infra SDKs ---
-            "pip3 install -q docker kubernetes boto3 "
+            "pip3 install -q docker kubernetes boto3 " +
             "google-cloud-storage azure-storage-blob || true",
             # --- SearXNG installation ---
             "git clone --depth 1 https://github.com/searxng/searxng.git /opt/searxng || true",
@@ -372,38 +375,38 @@ class VMManager:
             "pip3 install -q --no-build-isolation --no-deps /opt/searxng || true",
             # SearXNG settings
             "mkdir -p /etc/searxng",
-            f"cat > /etc/searxng/settings.yml << 'SEARXNG_EOF'\n"
-            "use_default_settings: true\n"
-            "general:\n"
-            "  instance_name: \"webshell-mcp searxng\"\n"
-            "  debug: false\n"
-            "server:\n"
-            f"  port: {self.searxng_port}\n"
-            "  bind_address: \"0.0.0.0\"\n"
-            "  secret_key: \"webshell-mcp-searxng\"\n"
-            "  limiter: false\n"
-            "  image_proxy: true\n"
-            "  method: POST\n"
-            "search:\n"
-            "  safe_search: 0\n"
-            "  default_lang: \"en\"\n"
-            "  formats:\n"
-            "    - html\n"
-            "    - json\n"
+            "cat > /etc/searxng/settings.yml << 'SEARXNG_EOF'\n" +
+            "use_default_settings: true\n" +
+            "general:\n" +
+            "  instance_name: \"webshell-mcp searxng\"\n" +
+            "  debug: false\n" +
+            "server:\n" +
+            f"  port: {self.searxng_port}\n" +
+            "  bind_address: \"0.0.0.0\"\n" +
+            "  secret_key: \"webshell-mcp-searxng\"\n" +
+            "  limiter: false\n" +
+            "  image_proxy: true\n" +
+            "  method: POST\n" +
+            "search:\n" +
+            "  safe_search: 0\n" +
+            "  default_lang: \"en\"\n" +
+            "  formats:\n" +
+            "    - html\n" +
+            "    - json\n" +
             "SEARXNG_EOF",
             # SearXNG systemd service
-            "cat > /etc/systemd/system/searxng.service << 'SYSTEMD_EOF'\n"
-            "[Unit]\n"
-            "Description=SearXNG\n"
-            "After=network.target\n"
-            "[Service]\n"
-            "Type=simple\n"
-            "Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml\n"
-            "ExecStart=/usr/bin/python3 -m searx.webapp\n"
-            "Restart=always\n"
-            "RestartSec=5\n"
-            "[Install]\n"
-            "WantedBy=multi-user.target\n"
+            "cat > /etc/systemd/system/searxng.service << 'SYSTEMD_EOF'\n" +
+            "[Unit]\n" +
+            "Description=SearXNG\n" +
+            "After=network.target\n" +
+            "[Service]\n" +
+            "Type=simple\n" +
+            "Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml\n" +
+            "ExecStart=/usr/bin/python3 -m searx.webapp\n" +
+            "Restart=always\n" +
+            "RestartSec=5\n" +
+            "[Install]\n" +
+            "WantedBy=multi-user.target\n" +
             "SYSTEMD_EOF",
             "systemctl daemon-reload || true",
             "systemctl enable searxng || true",
@@ -414,7 +417,7 @@ class VMManager:
             "  command -v \"$command\" >/dev/null 2>&1 || missing=\"$missing $command\"",
             "done",
             "[ -z \"$missing\" ] || { echo \"Missing required tools:$missing\" >&2; exit 1; }",
-            "python3 -c 'import docx, openpyxl, pptx, pypdf, reportlab, playwright' || "
+            "python3 -c 'import docx, openpyxl, pptx, pypdf, reportlab, playwright' || " +
             "{ echo 'Missing required document or browser Python libraries' >&2; exit 1; }",
             f"mkdir -p {os.path.dirname(TOOLCHAIN_MARKER)}",
             f"touch {TOOLCHAIN_MARKER}",
@@ -759,6 +762,56 @@ class VMManager:
 
         raise TimeoutError(f"SSH not reachable after {timeout}s")
 
+    def record_host_key(self, host: str, port: int) -> str | None:
+        """Pin the VM's SSH host key so clients never have to trust on first use.
+
+        Called once the VM answers SSH. The key is captured here, while we are
+        talking to a VM we just built on this machine, so ``ShellClient`` can
+        reject an unknown key instead of accepting whatever it is offered.
+
+        Args:
+            host: Address the VM answered SSH on.
+            port: SSH port the VM answered on.
+
+        Returns:
+            Path to the known_hosts file, or None if the key could not be read.
+        """
+        if not shutil.which("ssh-keyscan"):
+            self._log("ssh-keyscan not found -- cannot pin the VM host key")
+            return None
+
+        try:
+            result = self._run("ssh-keyscan", "-p", str(port), host, check=False)
+        except OSError as exc:
+            # Pinning is part of start-up; never let it take the VM down with it.
+            self._log(f"ssh-keyscan failed ({exc}) -- host key not pinned")
+            return None
+        scanned = [
+            line for line in (result.stdout or "").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        if not scanned:
+            self._log(f"No host key offered by {host}:{port} -- not pinned")
+            return None
+
+        path = self.known_hosts_path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # The VM is issued a new host key on every rebuild, so a stale entry
+        # for this address has to go before the current one is written.
+        stale = {host, f"[{host}]:{port}"}
+        kept: list[str] = []
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as handle:
+                kept = [
+                    line.rstrip("\n") for line in handle
+                    if line.split(" ", 1)[0] not in stale
+                ]
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join([*kept, *scanned]) + "\n")
+        os.chmod(path, 0o600)
+        self._log(f"Pinned VM host key in {path}")
+        return path
+
     def stop_vm(self):
         """Power off the VM if it is running."""
         if not shutil.which("vboxmanage"):
@@ -776,9 +829,12 @@ class VMManager:
         if not shutil.which("vboxmanage"):
             self._log("VirtualBox not found — assuming external SSH target")
             searxng_host = self.ssh_host
+            # Not our VM, so its key is not ours to pin; it has to already
+            # be in the caller's known_hosts.
             return {
                 "ssh_host": self.ssh_host,
                 "ssh_port": self.ssh_port,
+                "known_hosts": None,
                 "searxng_url": f"http://{searxng_host}:{self.searxng_port}",
             }
 
@@ -825,5 +881,6 @@ class VMManager:
         return {
             "ssh_host": host,
             "ssh_port": port,
+            "known_hosts": self.record_host_key(host, port),
             "searxng_url": f"http://{searxng_host}:{self.searxng_port}",
         }

@@ -298,11 +298,15 @@ class TestEnsureRunningVmRunning:
                     patch.object(vm, "start_vm"), \
                     patch.object(vm, "wait_for_ssh", return_value="127.0.0.1"), \
                     patch.object(vm, "_ensure_guest_toolchain") as ensure_tools, \
+                    patch.object(vm, "record_host_key", return_value="/tmp/known_hosts") as pin, \
                     patch.object(vm, "_vbox") as vbox:
                 result = vm.ensure_running()
 
         assert result["ssh_host"] == "127.0.0.1"
         assert result["ssh_port"] == 2223
+        # The VM's key is pinned before the client is handed the connection.
+        pin.assert_called_once_with("127.0.0.1", 2223)
+        assert result["known_hosts"] == "/tmp/known_hosts"
         assert result["searxng_url"] == "http://127.0.0.1:8889"
         restore.assert_called_once_with("clean-base")
         ensure_tools.assert_called_once_with("127.0.0.1", 2223)
@@ -333,3 +337,60 @@ class TestToolchainProvisioning:
             "apt_retry install -y --no-install-recommends ca-certificates"
         )
         subprocess.run(["dash", "-n", script_path], check=True)
+
+
+# ---------------------------------------------------------------------------
+# record_host_key
+# ---------------------------------------------------------------------------
+
+class TestRecordHostKey:
+    """The VM's host key is pinned while we are building it, so the client
+    never has to accept an unknown key on first contact."""
+
+    def test_writes_scanned_key(self, monkeypatch, tmp_path):
+        target = tmp_path / "kh" / "known_hosts"
+        vm = _vm(monkeypatch, SSH_KNOWN_HOSTS=str(target))
+        monkeypatch.setattr("webshell_client.vm_manager.shutil.which", lambda _: "/usr/bin/ssh-keyscan")
+        monkeypatch.setattr(
+            vm, "_run",
+            lambda *a, **k: _completed(stdout="# comment\n[10.0.0.5]:22 ssh-ed25519 AAAAkey\n"),
+        )
+
+        path = vm.record_host_key("10.0.0.5", 22)
+
+        assert path == str(target)
+        assert target.read_text().splitlines() == ["[10.0.0.5]:22 ssh-ed25519 AAAAkey"]
+
+    def test_replaces_stale_entry_but_keeps_other_hosts(self, monkeypatch, tmp_path):
+        target = tmp_path / "known_hosts"
+        target.write_text(
+            "[10.0.0.5]:22 ssh-ed25519 OLDKEY\n"
+            "other.example ssh-ed25519 KEEPME\n"
+        )
+        vm = _vm(monkeypatch, SSH_KNOWN_HOSTS=str(target))
+        monkeypatch.setattr("webshell_client.vm_manager.shutil.which", lambda _: "/usr/bin/ssh-keyscan")
+        monkeypatch.setattr(
+            vm, "_run",
+            lambda *a, **k: _completed(stdout="[10.0.0.5]:22 ssh-ed25519 NEWKEY\n"),
+        )
+
+        vm.record_host_key("10.0.0.5", 22)
+
+        assert target.read_text().splitlines() == [
+            "other.example ssh-ed25519 KEEPME",
+            "[10.0.0.5]:22 ssh-ed25519 NEWKEY",
+        ]
+
+    def test_returns_none_without_ssh_keyscan(self, monkeypatch, tmp_path):
+        vm = _vm(monkeypatch, SSH_KNOWN_HOSTS=str(tmp_path / "known_hosts"))
+        monkeypatch.setattr("webshell_client.vm_manager.shutil.which", lambda _: None)
+        assert vm.record_host_key("10.0.0.5", 22) is None
+
+    def test_returns_none_when_no_key_offered(self, monkeypatch, tmp_path):
+        target = tmp_path / "known_hosts"
+        vm = _vm(monkeypatch, SSH_KNOWN_HOSTS=str(target))
+        monkeypatch.setattr("webshell_client.vm_manager.shutil.which", lambda _: "/usr/bin/ssh-keyscan")
+        monkeypatch.setattr(vm, "_run", lambda *a, **k: _completed(stdout="# 10.0.0.5:22 SSH-2.0\n"))
+
+        assert vm.record_host_key("10.0.0.5", 22) is None
+        assert not target.exists()

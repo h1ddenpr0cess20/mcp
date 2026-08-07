@@ -202,6 +202,7 @@ class GrokipediaScraper:
                         if p > total_pages:
                             total_pages = p
                     except ValueError:
+                        # A non-numeric page parameter is not a page count; skip the link.
                         pass
 
             return {

@@ -107,6 +107,8 @@ class FetchClient:
                 if len(js_result["content"]) > len(result["content"]):
                     return js_result
             except Exception:
+                # The JS fallback is opportunistic; if Playwright is missing or the
+                # render fails, the static extraction above is still returned.
                 pass
 
         return result

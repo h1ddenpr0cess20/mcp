@@ -78,6 +78,8 @@ class ADBClient:
                     if r["exit_code"] == 0 and "connected" in r["stdout"].lower():
                         return r
             except Exception:
+                # This IP is only a candidate from the subnet sweep; an unreachable
+                # host or a refused ADB handshake just means it is not the device.
                 pass
             return None
 
@@ -100,6 +102,8 @@ class ADBClient:
                 if part.count(".") == 3:
                     return part
         except Exception:
+            # No default route, no `ip` binary, or unparseable output -- the
+            # caller falls back to an explicitly configured address.
             pass
         return None
 

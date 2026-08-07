@@ -27,13 +27,15 @@ class TestAgentRegistry:
     def test_delete_agent(self):
         registry = AgentRegistry()
         registry.create("temp", "Temporary agent.")
-        assert registry.delete("temp") is True
+        deleted = registry.delete("temp")
+        assert deleted is True
         assert registry.get("temp") is None
 
     @pytest.mark.unit
     def test_delete_nonexistent(self):
         registry = AgentRegistry()
-        assert registry.delete("nonexistent") is False
+        deleted = registry.delete("nonexistent")
+        assert deleted is False
 
     @pytest.mark.unit
     def test_overwrite_agent(self):
@@ -84,6 +86,8 @@ class TestConversationManager:
         from subagent_client import ConversationManager
         mgr = ConversationManager()
         mgr.add_exchange("conv1", "Hi", "Hello!")
-        assert mgr.delete("conv1") is True
+        deleted = mgr.delete("conv1")
+        assert deleted is True
         assert mgr.get_history("conv1") == []
-        assert mgr.delete("conv1") is False
+        deleted_again = mgr.delete("conv1")
+        assert deleted_again is False

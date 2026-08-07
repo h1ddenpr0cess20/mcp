@@ -11,12 +11,16 @@ class ShellClient:
         self,
         host: str | None = None,
         port: int | None = None,
+        known_hosts: str | None = None,
     ):
         self.host = host or os.getenv("SSH_HOST")
         self.port = port or int(os.getenv("SSH_PORT", "22"))
         self.user = os.getenv("SSH_USER")
         self.key_path = os.getenv("SSH_KEY_PATH")
         self.password = os.getenv("SSH_PASSWORD")
+        self.known_hosts = os.path.expanduser(
+            known_hosts or os.getenv("SSH_KNOWN_HOSTS", "~/.webshell_mcp/known_hosts")
+        )
         self.timeout = int(os.getenv("SSH_TIMEOUT", "10"))
         self.command_timeout = int(os.getenv("COMMAND_TIMEOUT", "1200"))
         self._client: paramiko.SSHClient | None = None
@@ -24,7 +28,14 @@ class ShellClient:
     def connect(self):
         """Establish SSH connection to the remote host."""
         self._client = paramiko.SSHClient()
-        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self._client.load_system_host_keys()
+        if os.path.isfile(self.known_hosts):
+            self._client.load_host_keys(self.known_hosts)
+        # An unknown host key is always a failure. The managed VM's key is
+        # pinned by VMManager.record_host_key while the VM is being built, so
+        # there is no first-contact gap to cover; any other target has to be
+        # in the system known_hosts or in SSH_KNOWN_HOSTS already.
+        self._client.set_missing_host_key_policy(paramiko.RejectPolicy())
         kwargs = dict(
             hostname=self.host,
             port=self.port,

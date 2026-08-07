@@ -13,7 +13,11 @@ load_dotenv()
 
 _vm = VMManager()
 _conn = _vm.ensure_running()
-_client = ShellClient(host=_conn["ssh_host"], port=_conn["ssh_port"])
+_client = ShellClient(
+    host=_conn["ssh_host"],
+    port=_conn["ssh_port"],
+    known_hosts=_conn["known_hosts"],
+)
 _file_server = FileServer()
 atexit.register(_vm.stop_vm)
 

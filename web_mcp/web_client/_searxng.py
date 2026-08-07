@@ -66,20 +66,25 @@ def _health_check(url: str, retries: int = 30) -> bool:
             if r.status_code == 200:
                 return True
         except (httpx.ConnectError, httpx.TimeoutException):
+            # Not up yet -- that is what we are polling for; sleep and retry.
             pass
         time.sleep(1)
     return False
 
 
 def _shutdown():
+    # Claim the handle before touching it: _shutdown runs both on a failed
+    # start-up and again via atexit, and clearing it first keeps the second
+    # call from signalling a pid that has already been reaped.
     global _process
-    if _process and _process.poll() is None:
-        _process.send_signal(signal.SIGTERM)
-        try:
-            _process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            _process.kill()
-        _process = None
+    process, _process = _process, None
+    if process is None or process.poll() is not None:
+        return
+    process.send_signal(signal.SIGTERM)
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 def ensure_running(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> str:
@@ -93,6 +98,8 @@ def ensure_running(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> str:
         if r.status_code == 200:
             return url
     except (httpx.ConnectError, httpx.TimeoutException):
+        # Nothing listening on that port, so no instance to reuse; fall
+        # through and start one.
         pass
 
     # Install if needed
