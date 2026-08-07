@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FastMCP server for scraping Grokipedia pages."
 requires-python = ">=3.9"
 dependencies = [
-    "fastmcp>=2.0",
+    "fastmcp>=3.4.5",
     "requests>=2.31.0",
     "beautifulsoup4>=4.11.0"
 ]
