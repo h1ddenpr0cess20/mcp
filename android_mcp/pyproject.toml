@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "FastMCP server for Android device control via ADB."
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=2.0",
-    "Pillow>=10.0",
-    "python-dotenv>=0.19",
+    "fastmcp>=3.4.5",
+    "Pillow>=12.3.0",
+    "python-dotenv>=1.2.2",
 ]
 
 [tool.pytest.ini_options]
@@ -44,16 +44,16 @@ exclude_lines = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
-    "mypy>=1.0.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+    "black>=26.5.1",
+    "isort>=8.0.1",
+    "flake8>=7.3.0",
+    "mypy>=2.3.0",
 ]
 test = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-mock>=3.10.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
 ]
