@@ -19,7 +19,7 @@ server = build_server(
     "rapidapi-search",
     INSTRUCTIONS,
     [
-        (   search_web, 
+        (   search_web,
             "search_web",
             "Supports all Google Advanced Search operators (site:, inurl:, intitle:, etc)."),
         (

@@ -1,6 +1,5 @@
-import pytest
 
-from firetv_client.apps import AppManager, DEFAULT_APP_ALIASES
+from firetv_client.apps import AppManager
 from firetv_client.client import ADBClient
 
 

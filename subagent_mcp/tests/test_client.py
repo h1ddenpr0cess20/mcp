@@ -2,7 +2,6 @@ import pytest
 import httpx
 
 from subagent_client import SubagentClient
-from tests.conftest import MOCK_RESPONSE, MOCK_MODELS_RESPONSE
 
 
 class TestSubagentClient:

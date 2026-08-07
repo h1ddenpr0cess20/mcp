@@ -1,5 +1,3 @@
-import os
-import urllib.parse
 
 DEFAULT_APP_ALIASES = {
     # Streaming

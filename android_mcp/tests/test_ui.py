@@ -1,4 +1,3 @@
-import pytest
 
 from android_client.client import ADBClient
 from android_client.ui import UIController

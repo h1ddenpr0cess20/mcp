@@ -1,8 +1,8 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import yfinance as yf
 
-from .base import _df_to_dict, _ticker
+from .base import _ticker
 
 
 class QuoteAPI:

@@ -1,6 +1,4 @@
-import subprocess
 
-import pytest
 
 from android_client.client import ADBClient
 

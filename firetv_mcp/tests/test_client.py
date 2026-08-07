@@ -1,6 +1,5 @@
 import subprocess
 
-import pytest
 
 from firetv_client.client import ADBClient
 

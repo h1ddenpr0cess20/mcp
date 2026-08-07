@@ -1,0 +1,10 @@
+# Shared lint config for every MCP server in this monorepo.
+# 140 accommodates the long shell-command strings in the VM provisioning code.
+line-length = 140
+
+[lint]
+select = ["E", "F", "W"]
+
+[lint.per-file-ignores]
+# Package __init__ files exist to re-export the public surface.
+"__init__.py" = ["F401", "F403"]

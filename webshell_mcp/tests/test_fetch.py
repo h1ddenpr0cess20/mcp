@@ -1,7 +1,6 @@
 import json
 
-import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
 from webshell_client.fetch import FetchClient
 

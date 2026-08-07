@@ -1,10 +1,9 @@
 import os
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import hashlib
 
 from lastfm_client import (
-    LastfmClient,
     LastfmAPIBase,
     AlbumAPI,
     ArtistAPI,
@@ -128,7 +127,7 @@ class TestLastfmAPIBase:
         ):
             client._request("test.method", {"param": "value"}, "POST")
 
-    @patch("lastfm_client.client.requests.get")
+    @patch("lastfm_client.base.requests.get")
     def test_request_raises_for_status(self, mock_get):
         """Test that request properly raises for HTTP errors."""
         mock_response = Mock()
@@ -545,7 +544,7 @@ class TestLibraryAPI:
 class TestLastfmClientIntegration:
     """Integration tests for the complete Last.fm client."""
 
-    @patch("lastfm_client.client.requests.get")
+    @patch("lastfm_client.base.requests.get")
     def test_end_to_end_request_flow(self, mock_get):
         """Test complete request flow from API call to response."""
         # Setup mock response

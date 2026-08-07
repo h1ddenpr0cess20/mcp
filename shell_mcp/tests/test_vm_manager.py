@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 
 from shell_client.vm_manager import VMManager

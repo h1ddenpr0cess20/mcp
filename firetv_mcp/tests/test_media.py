@@ -1,4 +1,3 @@
-import pytest
 
 from firetv_client.client import ADBClient
 from firetv_client.media import MediaController, FIRETV_KEYS

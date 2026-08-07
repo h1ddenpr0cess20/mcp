@@ -1,0 +1,51 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # One entry per MCP server; each vendors its own requirements.txt.
+  - package-ecosystem: pip
+    directories:
+      - /android_mcp
+      - /colab_shell_mcp
+      - /docker_shell_mcp
+      - /firetv_mcp
+      - /grokipedia_mcp
+      - /lastfm_mcp
+      - /rapidapi_mcp
+      - /shell_mcp
+      - /subagent_mcp
+      - /web_mcp
+      - /webshell_mcp
+      - /yfinance_mcp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: deps
+      prefix-development: deps-dev
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker
+    directory: /docker_shell_mcp/docker_shell_client/sandbox
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: docker
