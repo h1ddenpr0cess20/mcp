@@ -6,7 +6,7 @@ requires-python = ">=3.9"
 dependencies = [
     "fastmcp>=3.4.5",
     "requests>=2.31.0",
-    "beautifulsoup4>=4.11.0"
+    "beautifulsoup4>=4.15.0"
 ]
 
 [tool.setuptools.packages.find]
