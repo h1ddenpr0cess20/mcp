@@ -1,4 +1,4 @@
-FROM node:25-slim AS node
+FROM node:26-slim AS node
 
 FROM ubuntu:26.04
 
