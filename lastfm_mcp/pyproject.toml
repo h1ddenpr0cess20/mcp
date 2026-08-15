@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FastMCP server exposing Last.fm API methods grouped by type."
 requires-python = ">=3.9"
 dependencies = [
-    "fastmcp>=3.4.5",
+    "fastmcp>=3.4.7",
     "requests>=2.34.2",
     "python-dotenv>=1.2.2"
 ]
