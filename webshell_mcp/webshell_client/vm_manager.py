@@ -1,13 +1,19 @@
+import glob
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 
 
-ISO_URL = "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.4.0-amd64-netinst.iso"
+ISO_DIR_URL = "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/"
+ISO_NAME_RE = re.compile(r"debian-(\d+\.\d+\.\d+)-amd64-netinst\.iso")
+# Only used when the mirror listing can't be read; `current` moves off it eventually.
+ISO_FALLBACK_NAME = "debian-13.6.0-amd64-netinst.iso"
 ISO_MIN_SIZE = 500 * 1024 * 1024  # 500MB — netinst is ~754MB
 TOOLCHAIN_VERSION = "2"
 TOOLCHAIN_MARKER = f"/var/lib/webshell-mcp/toolchain-{TOOLCHAIN_VERSION}"
@@ -31,6 +37,29 @@ AGENT_APT_PACKAGES = (
     "sqlite3 ffmpeg imagemagick graphviz xvfb man-db gnupg openssl cron ufw"
 )
 OPTIONAL_APT_PACKAGES = "wkhtmltopdf unoconv miller"
+
+
+def _resolve_iso_name() -> str:
+    """Filename of the netinst ISO Debian is currently serving.
+
+    Debian's `current` directory only ever holds the newest point release, so a
+    pinned filename starts 404ing (wget exit 8) the moment a new one ships.
+    """
+    try:
+        with urllib.request.urlopen(ISO_DIR_URL + "SHA256SUMS", timeout=30) as resp:
+            body = resp.read().decode("utf-8", "replace")
+        versions = set(ISO_NAME_RE.findall(body))
+        if versions:
+            latest = max(versions, key=lambda v: tuple(int(p) for p in v.split(".")))
+            return f"debian-{latest}-amd64-netinst.iso"
+        raise ValueError("no netinst ISO listed")
+    except Exception as exc:
+        sys.stderr.write(
+            f"[vm-manager] Could not resolve current Debian ISO ({exc}); "
+            f"falling back to {ISO_FALLBACK_NAME}\n"
+        )
+        sys.stderr.flush()
+        return ISO_FALLBACK_NAME
 
 
 def _apt_toolchain_lines() -> list[str]:
@@ -105,8 +134,14 @@ class VMManager:
         self.vm_disk = int(os.getenv("VM_DISK", "30720"))
         self.vm_user = os.getenv("SSH_USER", "ai-agent")
         self.vm_pass = os.getenv("VM_PASS", "changeme123")
-        self.iso_path = os.path.expanduser(
-            os.getenv("ISO_PATH", "~/debian-13.4.0-amd64-netinst.iso")
+        self.iso_url = os.getenv("ISO_URL")
+        self.iso_path_pinned = os.getenv("ISO_PATH")
+        # Resolving the current release needs the network, so defer it to
+        # ensure_iso() and start from whatever is already on disk.
+        self.iso_path = (
+            os.path.expanduser(self.iso_path_pinned)
+            if self.iso_path_pinned
+            else self._local_iso() or os.path.expanduser(f"~/{ISO_FALLBACK_NAME}")
         )
         self.ssh_pubkey_path = os.path.expanduser(
             os.getenv("SSH_PUBKEY_PATH", "~/.ssh/ai_vm_key.pub")
@@ -190,12 +225,27 @@ class VMManager:
             return False
         return True
 
-    def ensure_iso(self):
-        part_path = self.iso_path + ".part"
+    def _local_iso(self) -> str | None:
+        """Newest complete netinst ISO already sitting in the home directory."""
+        candidates = []
+        for path in glob.glob(os.path.expanduser("~/debian-*-amd64-netinst.iso")):
+            match = ISO_NAME_RE.fullmatch(os.path.basename(path))
+            if match and os.path.getsize(path) >= ISO_MIN_SIZE:
+                candidates.append(
+                    (tuple(int(p) for p in match.group(1).split(".")), path)
+                )
+        return max(candidates)[1] if candidates else None
 
-        if self._iso_looks_valid() and not os.path.isfile(part_path):
+    def ensure_iso(self):
+        if self._iso_looks_valid() and not os.path.isfile(self.iso_path + ".part"):
             self._log(f"ISO found: {self.iso_path}")
             return
+
+        iso_url = self.iso_url or ISO_DIR_URL + _resolve_iso_name()
+        if not self.iso_path_pinned:
+            # Download whatever release `current` is serving today
+            self.iso_path = os.path.expanduser(f"~/{os.path.basename(iso_url)}")
+        part_path = self.iso_path + ".part"
 
         if os.path.isfile(self.iso_path) and not os.path.isfile(part_path):
             os.rename(self.iso_path, part_path)
@@ -204,9 +254,9 @@ class VMManager:
             size_mb = os.path.getsize(part_path) / (1024 * 1024)
             self._log(f"Resuming download ({size_mb:.0f}MB already downloaded)...")
 
-        with _Spinner("Downloading Debian netinst ISO (~754MB)"):
+        with _Spinner(f"Downloading {os.path.basename(iso_url)} (~754MB)"):
             self._run(
-                "wget", "-c", "-q", "-O", part_path, ISO_URL,
+                "wget", "-c", "-q", "-O", part_path, iso_url,
             )
             os.rename(part_path, self.iso_path)
 

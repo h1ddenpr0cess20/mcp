@@ -66,7 +66,8 @@ language stacks and services are left project-local to keep the base VM lean.
 | `VM_CPUS` | `2` | vCPU count |
 | `VM_DISK` | `30720` | Disk size in MB |
 | `VM_PASS` | `changeme123` | Installer user password |
-| `ISO_PATH` | `~/debian-13.4.0-amd64-netinst.iso` | Debian netinst ISO (downloaded if missing) |
+| `ISO_PATH` | latest `~/debian-*-amd64-netinst.iso` | Debian netinst ISO (downloaded if missing) |
+| `ISO_URL` | Debian `current` netinst | Override the ISO download URL |
 | `NETWORK_MODE` | `hostonly` | `hostonly` \| `nat` \| `bridged` |
 | `HOST_ONLY_IF` | `vboxnet0` | Host-only network interface |
 | `SHARED_FOLDER` | `~/vm-share` | Shared folder path |

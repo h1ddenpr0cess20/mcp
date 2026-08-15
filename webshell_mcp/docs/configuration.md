@@ -33,7 +33,8 @@ These variables are used only when `vboxmanage` is found on PATH. When VirtualBo
 | `VM_CPUS` | `2` | int | Number of virtual CPUs. |
 | `VM_DISK` | `30720` | int | Disk size in MB (30 GB). Set before first run; cannot be changed after VM creation without manual intervention. |
 | `VM_PASS` | `changeme123` | string | Password used during unattended Debian install. Not used for SSH after install (key auth is configured automatically). |
-| `ISO_PATH` | `~/debian-13.4.0-amd64-netinst.iso` | path | Path to the Debian 13 netinst ISO. Downloaded automatically from `cdimage.debian.org` if not present (~754 MB). Downloads are resumable. |
+| `ISO_PATH` | latest `~/debian-*-amd64-netinst.iso` | path | Path to the Debian netinst ISO. If unset, an already-downloaded netinst ISO in `~` is reused; otherwise the release currently published in `cdimage.debian.org/.../current/` is downloaded (~754 MB). Downloads are resumable. |
+| `ISO_URL` | Debian `current` netinst | url | Override the ISO download URL, e.g. to pin a point release or use a local mirror. |
 | `NETWORK_MODE` | `nat` | string | Network topology (see Network Modes below): `hostonly`, `nat`, or `bridged`. |
 | `HOST_ONLY_IF` | `vboxnet0` | string | Host-only network interface name. Used only when `NETWORK_MODE=hostonly`. Created automatically if it does not exist. |
 | `SHARED_FOLDER` | `~/vm-share` | path | Host directory mounted inside the VM at `/mnt/share`. Created on the host if it does not exist. |

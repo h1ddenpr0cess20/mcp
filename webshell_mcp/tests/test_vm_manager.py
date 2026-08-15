@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from unittest.mock import MagicMock, patch
 
-from webshell_client.vm_manager import VMManager
+from webshell_client.vm_manager import ISO_FALLBACK_NAME, VMManager, _resolve_iso_name
 
 
 # ---------------------------------------------------------------------------
@@ -394,3 +394,98 @@ class TestRecordHostKey:
 
         assert vm.record_host_key("10.0.0.5", 22) is None
         assert not target.exists()
+
+
+# ---------------------------------------------------------------------------
+# ISO URL resolution
+# ---------------------------------------------------------------------------
+
+class TestResolveIsoName:
+    def _sums(self, body):
+        resp = MagicMock()
+        resp.read.return_value = body.encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = lambda s, *a: False
+        return resp
+
+    def test_picks_highest_version_from_sha256sums(self):
+        body = (
+            "aaa  debian-13.6.0-amd64-netinst.iso\n"
+            "bbb  debian-13.10.0-amd64-netinst.iso\n"
+            "ccc  debian-13.6.0-amd64-DVD-1.iso\n"
+        )
+        with patch("webshell_client.vm_manager.urllib.request.urlopen", return_value=self._sums(body)):
+            assert _resolve_iso_name() == "debian-13.10.0-amd64-netinst.iso"
+
+    def test_falls_back_when_listing_unreachable(self):
+        with patch("webshell_client.vm_manager.urllib.request.urlopen", side_effect=OSError("boom")):
+            assert _resolve_iso_name() == ISO_FALLBACK_NAME
+
+    def test_falls_back_when_no_netinst_listed(self):
+        with patch("webshell_client.vm_manager.urllib.request.urlopen", return_value=self._sums("aaa  README\n")):
+            assert _resolve_iso_name() == ISO_FALLBACK_NAME
+
+
+class TestLocalIso:
+    def _make_iso(self, path):
+        with open(path, "wb") as f:
+            f.seek(600 * 1024 * 1024)
+            f.write(b"\x00")
+
+    def test_prefers_newest_complete_iso(self, monkeypatch, tmp_path):
+        self._make_iso(tmp_path / "debian-13.4.0-amd64-netinst.iso")
+        self._make_iso(tmp_path / "debian-13.6.0-amd64-netinst.iso")
+        (tmp_path / "debian-13.9.0-amd64-netinst.iso").write_bytes(b"partial")
+        monkeypatch.setenv("HOME", str(tmp_path))
+        vm = _vm(monkeypatch)
+        assert vm.iso_path == str(tmp_path / "debian-13.6.0-amd64-netinst.iso")
+
+    def test_defaults_to_fallback_name_when_nothing_local(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        vm = _vm(monkeypatch)
+        assert vm.iso_path == str(tmp_path / ISO_FALLBACK_NAME)
+
+
+class TestEnsureIso:
+    def test_skips_download_when_local_iso_valid(self, monkeypatch, tmp_path):
+        iso = tmp_path / "debian-13.6.0-amd64-netinst.iso"
+        with open(iso, "wb") as f:
+            f.seek(600 * 1024 * 1024)
+            f.write(b"\x00")
+        monkeypatch.setenv("ISO_PATH", str(iso))
+        vm = _vm(monkeypatch)
+        with patch("subprocess.run") as run:
+            vm.ensure_iso()
+        run.assert_not_called()
+
+    def test_downloads_resolved_url_and_retargets_path(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        vm = _vm(monkeypatch)
+        expected = tmp_path / "debian-13.9.0-amd64-netinst.iso"
+
+        def fake_run(args, **kwargs):
+            assert args[-1].endswith("debian-13.9.0-amd64-netinst.iso")
+            Path(args[-2]).write_bytes(b"iso")
+            return _completed(0)
+
+        with patch("webshell_client.vm_manager._resolve_iso_name", return_value="debian-13.9.0-amd64-netinst.iso"), \
+             patch("subprocess.run", side_effect=fake_run):
+            vm.ensure_iso()
+        assert vm.iso_path == str(expected)
+        assert expected.is_file()
+
+    def test_iso_url_env_overrides_resolution(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("ISO_URL", "http://mirror.local/debian-13.2.0-amd64-netinst.iso")
+        vm = _vm(monkeypatch)
+
+        def fake_run(args, **kwargs):
+            assert args[-1] == "http://mirror.local/debian-13.2.0-amd64-netinst.iso"
+            Path(args[-2]).write_bytes(b"iso")
+            return _completed(0)
+
+        with patch("webshell_client.vm_manager._resolve_iso_name") as resolve, \
+             patch("subprocess.run", side_effect=fake_run):
+            vm.ensure_iso()
+        resolve.assert_not_called()
+        assert vm.iso_path == str(tmp_path / "debian-13.2.0-amd64-netinst.iso")
