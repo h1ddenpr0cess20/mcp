@@ -1,0 +1,97 @@
+name: Debian ISO
+
+on:
+  schedule:
+    # Weekly, offset from the Dependabot runs.
+    - cron: "17 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: debian-iso
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Resolve current Debian netinst release
+        id: iso
+        run: python .github/scripts/update_debian_iso.py
+
+      - name: Check for an existing branch
+        if: steps.iso.outputs.changed == 'true'
+        id: branch
+        env:
+          BRANCH: chore/debian-iso-${{ steps.iso.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$BRANCH already exists — nothing to do." >&2
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The pull_request workflows do not fire for PRs opened with GITHUB_TOKEN,
+      # so validate the bump here instead of relying on checks appearing on the PR.
+      - name: Lint
+        if: steps.branch.outputs.exists == 'false'
+        run: |
+          python -m pip install --quiet ruff
+          ruff check .
+
+      - name: Test affected servers
+        if: steps.branch.outputs.exists == 'false'
+        run: |
+          python -m pip install --quiet pytest pytest-mock
+          for server in shell_mcp webshell_mcp; do
+            python -m pip install --quiet -r "$server/requirements.txt"
+            (cd "$server" && python -m pytest -q)
+          done
+
+      - name: Open pull request
+        if: steps.branch.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: chore/debian-iso-${{ steps.iso.outputs.version }}
+          VERSION: ${{ steps.iso.outputs.version }}
+          PREVIOUS: ${{ steps.iso.outputs.previous }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git commit -am "deps: bump Debian netinst fallback to $VERSION"
+          git push -u origin "$BRANCH"
+
+          cat > /tmp/pr-body.md <<EOF
+          Debian's \`current\` directory now serves \`debian-$VERSION-amd64-netinst.iso\` (was \`$PREVIOUS\`).
+
+          The VM managers resolve the filename from the mirror at download time, so this only
+          refreshes the offline fallback in \`shell_mcp\` and \`webshell_mcp\` plus the illustrative
+          values in the \`.env.example\` files. Runtime behaviour is unchanged while the mirror is
+          reachable.
+
+          Verified before this PR was opened: the mirror serves the new ISO (\`HEAD\` -> 200),
+          \`ruff check .\` is clean, and the \`shell_mcp\` and \`webshell_mcp\` suites pass. Those ran
+          in the scheduled job rather than as PR checks, because \`pull_request\` workflows do not
+          fire for PRs opened with \`GITHUB_TOKEN\`.
+
+          Opened automatically by \`.github/workflows/debian-iso.yml\`.
+          EOF
+
+          gh pr create \
+            --title "deps: bump Debian netinst fallback to $VERSION" \
+            --body-file /tmp/pr-body.md
