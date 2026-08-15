@@ -102,7 +102,8 @@ When `vboxmanage` is on `PATH`, the server can automatically create and manage a
 | `VM_CPUS`        | `2`                                 | vCPU count |
 | `VM_DISK`        | `30720`                             | Disk size in MB |
 | `VM_PASS`        | `changeme123`                       | Installer account password |
-| `ISO_PATH`       | `~/debian-13.4.0-amd64-netinst.iso` | Debian netinst ISO (downloaded automatically if missing) |
+| `ISO_PATH`       | latest `~/debian-*-amd64-netinst.iso` | Debian netinst ISO (downloaded automatically if missing) |
+| `ISO_URL`        | Debian `current` netinst            | Override the ISO download URL |
 | `NETWORK_MODE`   | `hostonly`                          | `hostonly` \| `nat` \| `bridged` |
 | `HOST_ONLY_IF`   | `vboxnet0`                          | Host-only network interface name |
 | `SHARED_FOLDER`  | `~/vm-share`                        | Host path mounted as `/mnt/share` inside the sandbox |
