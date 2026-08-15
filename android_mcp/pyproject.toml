@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FastMCP server for Android device control via ADB."
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=3.4.5",
+    "fastmcp>=3.4.7",
     "Pillow>=12.3.0",
     "python-dotenv>=1.2.2",
 ]
