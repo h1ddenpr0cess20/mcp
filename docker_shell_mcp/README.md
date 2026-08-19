@@ -47,7 +47,7 @@ Copy `.env.example` to `.env`. Useful settings include:
 
 | Variable | Default | Description |
 |---|---|---|
-| `DOCKER_COMMAND` | `sudo -n docker` | Non-interactive Docker command; set to `docker` for rootless or group-enabled Docker |
+| `DOCKER_COMMAND` | auto-detected | Docker command to use. Left unset the server probes `docker` first and falls back to `sudo -n docker` only if the socket needs root. Set it to pin a command, e.g. `podman` |
 | `DOCKER_IMAGE` | `shell-mcp-sandbox:latest` | Image to use; missing images are built from the bundled Dockerfile |
 | `DOCKER_CONTAINER` | `shell-mcp-sandbox` | Managed container name |
 | `DOCKER_VOLUME` | `shell-mcp-data` | Named volume mounted at the workdir |
@@ -63,6 +63,23 @@ Copy `.env.example` to `.env`. Useful settings include:
 The default user is root inside the container so additional tools can be
 installed with `apt`. Docker's isolation boundary is not equivalent to a
 hardened VM; do not mount sensitive host paths or the Docker socket into this
-sandbox. The server deliberately does neither. The default command expects
-passwordless sudo permission for Docker; `-n` makes a missing permission fail
-immediately instead of blocking an MCP process on a password prompt.
+sandbox. The server deliberately does neither.
+
+## Docker access
+
+No sudo is required when Docker is usable by the account running the server —
+the common case with docker-group membership, rootless Docker, Docker Desktop,
+or a remote `DOCKER_HOST`. On first use the server probes `docker`, and only
+if that cannot reach the daemon does it try `sudo -n docker`. Setting
+`DOCKER_COMMAND` skips the probe and uses that command as-is.
+
+Docker commands are run with stdin closed, so a helper that tries to read from
+the terminal (a sudo password prompt, most often) fails immediately with a
+reported error instead of blocking the server on input it cannot supply. Any
+sudo command should still include `-n`. If neither candidate reaches the
+daemon, setup fails with what each one reported and how to fix it; the usual
+remedy is:
+
+```bash
+sudo usermod -aG docker "$USER"   # then log out and back in
+```
