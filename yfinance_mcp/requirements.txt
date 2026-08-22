@@ -1,2 +1,2 @@
 fastmcp>=3.4.7
-yfinance>=1.5.2
+yfinance>=1.6.0
