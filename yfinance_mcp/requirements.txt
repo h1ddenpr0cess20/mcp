@@ -1,2 +1,2 @@
-fastmcp>=4.0.3
+fastmcp>=4.0.4
 yfinance>=1.7.0
