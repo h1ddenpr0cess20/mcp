@@ -77,15 +77,24 @@ FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any
 
 **Requirements**: OpenAI-compatible endpoint with Responses API support (e.g. LM Studio)
 
-### Blog MCP (`blog_mcp/`)
-FastMCP server for running a private, password-protected blog. An assistant writes and manages Markdown posts through MCP tools; you read them on a built-in web viewer. No API key required.
-- Create, edit, publish, unpublish, and delete posts; drafts by default
-- Find-and-replace edits so small changes don't resend a whole post
-- Tags, search across titles, bodies, and tags with match snippets, and paging
-- Built-in viewer on `127.0.0.1` behind HTTP Basic auth (generated password), optional HTTPS, no scripts, `noindex`
-- Posts stored in a local SQLite file with owner-only permissions
+### Blog (`blog/`)
+A private blog you run yourself. It is a standalone web application, not an MCP server: start it and it works on its own.
+- Write in Markdown in the browser, with a live preview, drafts, publishing, tags, and image upload
+- Dashboard for managing posts; editing conflicts with other editors are caught instead of overwritten
+- Login page and sessions; private by default, with an option to make published posts public
+- A JSON API (bearer token) that tools such as `blog_mcp` use
+- Posts live in a local SQLite file; no external services
 
-**Requirements**: Nothing beyond Python; the viewer password is generated on first run
+**Requirements**: Nothing beyond Python; the login password is generated on first run
+
+### Blog MCP (`blog_mcp/`)
+FastMCP server that lets an AI assistant manage the blog above through its JSON API. It keeps no data of its own, and the blog keeps working when it is off.
+- Create, edit, publish, unpublish, search, and delete posts
+- Find-and-replace edits so small changes don't resend a whole post
+- Upload images from your computer and get Markdown for them
+- Reports whether the blog is running, and says how to start it when it isn't
+
+**Requirements**: A running blog (`python blog/blog.py`); it finds the API token itself when both are on the same computer
 
 ### Colab Shell MCP (`colab_shell_mcp/`)
 Shell execution and file operations inside a Google Colab runtime, with the same

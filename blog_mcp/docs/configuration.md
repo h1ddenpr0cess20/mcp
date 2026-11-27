@@ -9,20 +9,17 @@ How to install, run, and connect the Blog MCP server to an MCP client.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Running the Server](#running-the-server)
-- [Storage](#storage)
-- [Viewer Login](#viewer-login)
-- [Remote Access and HTTPS](#remote-access-and-https)
+- [Finding the Blog](#finding-the-blog)
 - [Transport Options](#transport-options)
 - [Connecting to an MCP Client](#connecting-to-an-mcp-client)
 - [Connecting to Other MCP Clients](#connecting-to-other-mcp-clients)
-- [Backups](#backups)
 
 ---
 
 ## Requirements
 
 - Python 3.10 or later
-- No API keys, accounts, or external services
+- A running [blog](../../blog/README.md) (this server manages it; it does not host anything itself)
 
 ---
 
@@ -61,92 +58,52 @@ pip install -r blog_mcp/requirements.txt
 
 ```bash
 cp blog_mcp/.env.example blog_mcp/.env
-# Edit .env to set the blog title, port, or password
 ```
 
 ---
 
 ## Running the Server
 
+Start the blog first (`python blog/blog.py`), then:
+
 ```bash
 python blog_mcp/server.py
 ```
 
-On startup the server prints the viewer address and where the password is kept:
-
-```
-[blog] viewer: http://127.0.0.1:9901  (user: owner, password: /home/you/mcp-blog/viewer_password)
-```
+The blog does not need this server and this server does not host the blog, so you can start and stop them independently.
 
 ---
 
-## Storage
+## Finding the Blog
 
-| Variable   | Default      | Description |
-|------------|--------------|-------------|
-| `BLOG_DIR` | `~/mcp-blog` | Directory holding the blog |
+| Variable          | Default                 | Description |
+|-------------------|-------------------------|-------------|
+| `BLOG_URL`        | `http://127.0.0.1:9901` | Address of the blog |
+| `BLOG_API_TOKEN`  | *(from file)*           | The blog's API token |
+| `BLOG_DIR`        | `~/mcp-blog`            | Where to look for the token file |
+| `BLOG_TIMEOUT`    | `30`                    | Seconds to wait for an answer |
+| `BLOG_VERIFY_TLS` | `true`                  | Verify HTTPS certificates |
 
-The directory contains:
+### Same computer
 
-| File              | Description |
-|-------------------|-------------|
-| `blog.db`         | SQLite database with every post, tag, and timestamp |
-| `viewer_password` | Generated viewer password (only when `BLOG_PASSWORD` is unset) |
+With the blog's default settings you need no configuration. The blog writes its API token to `~/mcp-blog/api_token`, and this server reads it from there. If you moved the blog's data with `BLOG_DIR`, set the same `BLOG_DIR` here.
 
-If the directory does not exist it is created with mode `0700`, and `blog.db` and `viewer_password` are created with mode `0600`. A directory that already exists is left as it is, so pointing `BLOG_DIR` at a shared folder does not change its permissions.
-
-Limits: titles up to 200 characters, summaries up to 500, bodies up to 1,000,000, and up to 20 tags per post (50 characters each).
-
----
-
-## Viewer Login
-
-| Variable           | Default       | Description |
-|--------------------|---------------|-------------|
-| `BLOG_TITLE`       | `Private Blog` | Blog name |
-| `BLOG_DESCRIPTION` | *(empty)*     | Tagline |
-| `BLOG_USERNAME`    | `owner`       | Login name (must not contain `:`) |
-| `BLOG_PASSWORD`    | *(generated)* | Login password |
-
-When `BLOG_PASSWORD` is unset, the server generates a random password the first time it runs and keeps it in `$BLOG_DIR/viewer_password`. The same password is reused on later starts. To change it, edit or delete that file and restart; deleting it generates a new one.
-
-When `BLOG_PASSWORD` is set, nothing is written to disk. Keep `.env` out of version control (the repo's `.gitignore` already excludes it).
-
-The viewer never starts without a password.
-
----
-
-## Remote Access and HTTPS
-
-| Variable                       | Default     | Description |
-|--------------------------------|-------------|-------------|
-| `BLOG_HOST`                    | `127.0.0.1` | Bind address |
-| `BLOG_PORT`                    | `9901`      | Port |
-| `BLOG_TLS_CERT`, `BLOG_TLS_KEY` | *(none)*   | PEM files; set both to serve HTTPS |
-
-HTTP Basic authentication sends the password with every request, so on any network other than loopback it must travel over HTTPS. To read the blog from your phone or another computer:
-
-```bash
-# Self-signed certificate valid for one year (your browser will ask you to trust it once)
-openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-  -keyout ~/mcp-blog/blog.key -out ~/mcp-blog/blog.pem -subj "/CN=blog"
-```
+### Another machine
 
 ```
-BLOG_HOST=0.0.0.0
-BLOG_TLS_CERT=~/mcp-blog/blog.pem
-BLOG_TLS_KEY=~/mcp-blog/blog.key
+BLOG_URL=https://blog.example.com
+BLOG_API_TOKEN=<the token from the blog's api_token file>
 ```
 
-If you bind a non-loopback address without a certificate, the server still starts but prints a warning. Another option is to keep the viewer on loopback and reach it through an SSH tunnel or a VPN you already trust.
+Use `https://` so the token is encrypted in transit; the server warns if you use plain `http://` to a non-local address. For a blog with a self-signed certificate, set `BLOG_VERIFY_TLS=false` (this skips certificate checking, so use it only on a network you trust).
 
-Only the viewer is affected by these settings. The MCP endpoint (port 9900) stays on `127.0.0.1` and is not password-protected; do not expose it.
+The blog's API token is separate from its login password, and it only works for the API.
 
 ---
 
 ## Transport Options
 
-The active transport is set in the `__main__` block of `server.py`. The viewer runs in the same process whichever transport you pick.
+The active transport is set in the `__main__` block of `server.py`.
 
 ### HTTP (default in a terminal)
 
@@ -162,7 +119,7 @@ Server listens at `http://127.0.0.1:9900/mcp`.
 mcp.run()
 ```
 
-The server picks stdio automatically when it is not started from an interactive terminal. Startup messages go to stderr, so they never interfere with the protocol.
+The server picks stdio automatically when it is not started from an interactive terminal.
 
 ### SSE
 
@@ -195,7 +152,11 @@ Add an entry to your client's MCP server config:
 }
 ```
 
-Restart your MCP client. The viewer starts together with the server and stops when the client closes it.
+Restart your MCP client. If the blog is on another machine, add its settings to the entry:
+
+```json
+"env": { "BLOG_URL": "https://blog.example.com", "BLOG_API_TOKEN": "..." }
+```
 
 ### Option B — HTTP
 
@@ -227,22 +188,10 @@ To use a different port, edit `server.py`:
 mcp.run(transport="http", host="127.0.0.1", port=9902, path="/mcp")
 ```
 
-To let other `subagent_mcp` agents write to the blog, register it there:
+To let `subagent_mcp` agents manage the blog, register it there:
 
 ```
 SUBAGENT_MCP_SERVERS=blog=http://127.0.0.1:9900/mcp
 ```
 
-Do not expose the MCP port to the public internet or an untrusted network.
-
----
-
-## Backups
-
-Everything lives in `BLOG_DIR`. To back up, copy `blog.db` while the server is idle, or use SQLite's own tool, which is safe at any time:
-
-```bash
-sqlite3 ~/mcp-blog/blog.db ".backup '$HOME/blog-backup.db'"
-```
-
-To restore, stop the server and put the file back as `blog.db`.
+The MCP endpoint itself has no authentication, like the other servers in this repo. Anyone who can reach it can use its tools, so keep it on `127.0.0.1` and do not expose it to the internet or an untrusted network.

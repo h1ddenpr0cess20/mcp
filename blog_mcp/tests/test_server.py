@@ -1,4 +1,4 @@
-"""Tests for the FastMCP tool layer in server.py, driven through an in-memory MCP client."""
+"""Tests for the FastMCP tools in server.py, driven through an in-memory MCP client against a fake blog."""
 
 import asyncio
 import importlib.util
@@ -7,37 +7,54 @@ import sys
 from pathlib import Path
 
 import pytest
+import requests
 from fastmcp import Client
 
-from blog_client import BlogServer
-from tests.conftest import fetch
+from blog_client import BlogClient
+from tests.conftest import FakeSession, make_response
 
 SERVER_PATH = Path(__file__).resolve().parent.parent / "server.py"
 
 EXPECTED_TOOLS = {
-    "create_post", "get_post", "list_posts", "update_post", "replace_in_post", "publish_post",
-    "unpublish_post", "delete_post", "search_posts", "list_tags", "get_blog_info",
+    "create_post", "get_post", "list_posts", "update_post", "replace_in_post", "publish_post", "unpublish_post",
+    "delete_post", "search_posts", "list_tags", "upload_image", "get_blog_info",
 }
 
+POST = {"slug": "hello", "title": "Hello", "status": "draft", "tags": [], "url": "http://blog.test/post/hello"}
 
-@pytest.fixture
-def srv(tmp_path, monkeypatch):
-    """server.py imported fresh, pointed at a temp blog with the viewer on an ephemeral port."""
-    monkeypatch.setenv("BLOG_DIR", str(tmp_path / "blog"))
-    monkeypatch.setenv("BLOG_PORT", "0")
-    monkeypatch.delenv("BLOG_PASSWORD", raising=False)
-    monkeypatch.setattr(BlogServer, "POLL_INTERVAL", 0.01)  # server.py starts the viewer on import
-    spec = importlib.util.spec_from_file_location("blog_server_under_test", SERVER_PATH)
+
+def load_server(monkeypatch, tmp_path, url="http://127.0.0.1:9901"):
+    monkeypatch.setenv("BLOG_URL", url)
+    monkeypatch.setenv("BLOG_API_TOKEN", "test-token")
+    monkeypatch.setenv("BLOG_DIR", str(tmp_path))
+    spec = importlib.util.spec_from_file_location("blog_mcp_server_under_test", SERVER_PATH)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    module._web.AUTH_FAIL_DELAY = 0
+    return module
+
+
+@pytest.fixture
+def srv(monkeypatch, tmp_path):
+    module = load_server(monkeypatch, tmp_path)
     yield module
-    module._web.stop()
-    sys.modules.pop(spec.name, None)
+    sys.modules.pop("blog_mcp_server_under_test", None)
 
 
-def call(module, name: str, **arguments):
+@pytest.fixture
+def blog(srv):
+    """Answer the server's API calls from `blog.reply`; `blog.session` records what it sent."""
+
+    class Fake:
+        reply = staticmethod(lambda method, url, kwargs: make_response(200, POST))
+
+    fake = Fake()
+    fake.session = FakeSession(lambda m, u, k: fake.reply(m, u, k))
+    srv._client = BlogClient(base_url="http://blog.test", token="test-token", session=fake.session)
+    return fake
+
+
+def call(module, name, **arguments):
     async def run():
         async with Client(module.mcp) as client:
             return await client.call_tool(name, arguments, raise_on_error=False)
@@ -45,13 +62,13 @@ def call(module, name: str, **arguments):
     return asyncio.run(run())
 
 
-def ok(module, name: str, **arguments) -> dict:
+def ok(module, name, **arguments):
     result = call(module, name, **arguments)
     assert not result.is_error, result.content[0].text
     return result.data
 
 
-def error_text(module, name: str, **arguments) -> str:
+def failure(module, name, **arguments) -> str:
     result = call(module, name, **arguments)
     assert result.is_error
     return result.content[0].text
@@ -67,189 +84,191 @@ class TestToolSurface:
         assert asyncio.run(names()) == EXPECTED_TOOLS
 
     @pytest.mark.integration
-    def test_every_tool_is_documented(self, srv):
+    def test_every_tool_is_documented_and_schemas_stay_simple(self, srv):
         async def tools():
             async with Client(srv.mcp) as client:
                 return await client.list_tools()
 
         for tool in asyncio.run(tools()):
             assert tool.description and len(tool.description) > 20, tool.name
+            assert "anyOf" not in json.dumps(tool.inputSchema), tool.name  # local-LLM friendly: no null unions
 
     @pytest.mark.integration
-    def test_tool_schemas_avoid_null_unions_for_local_llm_compatibility(self, srv):
-        async def tools():
-            async with Client(srv.mcp) as client:
-                return await client.list_tools()
-
-        for tool in asyncio.run(tools()):
-            assert "anyOf" not in json.dumps(tool.inputSchema), tool.name
-
-
-class TestPostLifecycle:
-    @pytest.mark.integration
-    def test_create_publish_edit_unpublish_delete(self, srv):
-        created = ok(srv, "create_post", title="Hello World", body="First draft.", tags=["Intro"])
-        assert created["slug"] == "hello-world"
-        assert created["status"] == "draft"
-        assert created["tags"] == ["intro"]
-        assert created["url"] == f"{srv._web.base_url}/post/hello-world"
-
-        assert ok(srv, "publish_post", slug="hello-world")["status"] == "published"
-        replaced = ok(srv, "replace_in_post", slug="hello-world", find="First draft", replace="Final text")
-        assert (replaced["body"], replaced["replacements"]) == ("Final text.", 1)
-        assert ok(srv, "get_post", slug="hello-world")["body"] == "Final text."
-        assert ok(srv, "unpublish_post", slug="hello-world")["status"] == "draft"
-        assert ok(srv, "delete_post", slug="hello-world") == {"slug": "hello-world", "deleted": True}
-        assert ok(srv, "delete_post", slug="hello-world") == {"slug": "hello-world", "deleted": False}
+    def test_importing_the_server_serves_nothing_and_makes_no_requests(self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr(requests.Session, "request", lambda *a, **k: calls.append(a))
+        module = load_server(monkeypatch, tmp_path)
+        try:
+            assert calls == []
+            assert not hasattr(module, "_web") and not hasattr(module, "_site")
+        finally:
+            sys.modules.pop("blog_mcp_server_under_test", None)
 
     @pytest.mark.integration
-    def test_create_with_publish_flag_and_explicit_fields(self, srv):
-        post = ok(srv, "create_post", title="T", body="B", slug="custom", summary="S", publish=True)
-        assert (post["slug"], post["summary"], post["status"]) == ("custom", "S", "published")
+    def test_the_server_owns_no_storage(self, srv, tmp_path):
+        assert list(tmp_path.iterdir()) == []  # no database, no password file: the blog owns all of that
+
+
+class TestToolsCallTheBlog:
+    @pytest.mark.integration
+    def test_create_post(self, srv, blog):
+        result = ok(srv, "create_post", title="Hello", body="Body", tags=["a"], slug="hello", summary="S", publish=True)
+        assert result["url"] == "http://blog.test/post/hello"
+        assert blog.session.last["json"] == {
+            "title": "Hello", "body": "Body", "tags": ["a"], "slug": "hello", "summary": "S", "publish": True,
+        }
 
     @pytest.mark.integration
-    def test_update_post_keeps_unspecified_fields(self, srv):
-        ok(srv, "create_post", title="Original", body="Body", tags=["a", "b"])
-        post = ok(srv, "update_post", slug="original", title="Renamed")
-        assert (post["title"], post["body"], post["tags"]) == ("Renamed", "Body", ["a", "b"])
+    def test_get_and_list(self, srv, blog):
+        ok(srv, "get_post", slug="hello")
+        assert blog.session.last["url"] == "http://blog.test/api/v1/posts/hello"
+        blog.reply = lambda m, u, k: make_response(200, {"posts": [POST], "total": 1, "limit": 20, "offset": 0})
+        assert ok(srv, "list_posts", status="draft", tag="x", limit=5, offset=2)["total"] == 1
+        assert blog.session.last["params"] == {"status": "draft", "tag": "x", "limit": 5, "offset": 2}
 
     @pytest.mark.integration
-    def test_update_post_tag_handling(self, srv):
-        ok(srv, "create_post", title="T", tags=["a", "b"])
-        assert ok(srv, "update_post", slug="t", tags=["c"])["tags"] == ["c"]
-        assert ok(srv, "update_post", slug="t", clear_tags=True)["tags"] == []
+    @pytest.mark.parametrize("arguments,sent", [
+        ({"title": "New"}, {"title": "New"}),
+        ({"body": "B"}, {"body": "B"}),
+        ({"summary": "S"}, {"summary": "S"}),
+        ({"tags": ["a", "b"]}, {"tags": ["a", "b"]}),
+        ({"clear_tags": True}, {"tags": []}),
+        ({"tags": ["z"], "clear_tags": True}, {"tags": ["z"]}),
+        ({"new_slug": "n"}, {"slug": "n"}),
+        ({"title": "T", "new_slug": "n", "tags": ["x"]}, {"title": "T", "slug": "n", "tags": ["x"]}),
+    ])
+    def test_update_post_sends_only_what_was_asked_for(self, srv, blog, arguments, sent):
+        ok(srv, "update_post", slug="hello", **arguments)
+        assert (blog.session.last["method"], blog.session.last["url"]) == ("PATCH", "http://blog.test/api/v1/posts/hello")
+        assert blog.session.last["json"] == sent
 
     @pytest.mark.integration
-    def test_tags_win_over_clear_tags(self, srv):
-        ok(srv, "create_post", title="T", tags=["a"])
-        assert ok(srv, "update_post", slug="t", tags=["z"], clear_tags=True)["tags"] == ["z"]
+    def test_update_with_nothing_asked_for_is_left_to_the_blog_to_reject(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(400, {"error": "Nothing to update: pass at least one field to change"})
+        assert "Nothing to update" in failure(srv, "update_post", slug="hello")
 
     @pytest.mark.integration
-    def test_update_post_can_rename_slug(self, srv):
-        ok(srv, "create_post", title="T")
-        post = ok(srv, "update_post", slug="t", new_slug="renamed")
-        assert post["slug"] == "renamed"
-        assert post["url"].endswith("/post/renamed")
+    def test_replace_in_post(self, srv, blog):
+        ok(srv, "replace_in_post", slug="hello", find="a", replace="b", replace_all=True)
+        assert blog.session.last["url"].endswith("/hello/replace")
+        assert blog.session.last["json"] == {"find": "a", "replace": "b", "replace_all": True}
 
     @pytest.mark.integration
-    def test_list_posts(self, srv):
-        ok(srv, "create_post", title="Draft")
-        ok(srv, "create_post", title="Live", publish=True, tags=["x"])
-        everything = ok(srv, "list_posts")
-        assert everything["total"] == 2
-        assert all("url" in post and "body" not in post for post in everything["posts"])
-        assert [p["slug"] for p in ok(srv, "list_posts", status="published")["posts"]] == ["live"]
-        assert [p["slug"] for p in ok(srv, "list_posts", tag="x")["posts"]] == ["live"]
-        assert len(ok(srv, "list_posts", limit=1)["posts"]) == 1
+    @pytest.mark.parametrize("tool,suffix", [("publish_post", "/publish"), ("unpublish_post", "/unpublish")])
+    def test_publish_and_unpublish(self, srv, blog, tool, suffix):
+        ok(srv, tool, slug="hello")
+        assert blog.session.last["url"].endswith(f"/hello{suffix}")
 
     @pytest.mark.integration
-    def test_search_and_tags(self, srv):
-        ok(srv, "create_post", title="Soup", body="Simmer the carrots gently.", tags=["cooking"], publish=True)
-        result = ok(srv, "search_posts", query="carrots")
-        assert result["count"] == 1
-        assert "carrots" in result["posts"][0]["snippet"]
-        assert result["posts"][0]["url"].endswith("/post/soup")
-        assert ok(srv, "list_tags")["tags"] == [{"tag": "cooking", "count": 1}]
+    def test_delete_post(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(200, {"slug": "hello", "deleted": True})
+        assert ok(srv, "delete_post", slug="hello") == {"slug": "hello", "deleted": True}
+        blog.reply = lambda m, u, k: make_response(404, {"error": "Post 'hello' not found"})
+        assert ok(srv, "delete_post", slug="hello") == {"slug": "hello", "deleted": False}
+
+    @pytest.mark.integration
+    def test_search_and_tags(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(200, {"query": "q", "posts": [], "count": 0})
+        ok(srv, "search_posts", query="two words", status="published", limit=3)
+        assert blog.session.last["params"] == {"q": "two words", "status": "published", "limit": 3}
+        blog.reply = lambda m, u, k: make_response(200, {"tags": [{"tag": "x", "count": 2}], "count": 1})
+        assert ok(srv, "list_tags", status="published")["tags"][0]["count"] == 2
+
+    @pytest.mark.integration
+    def test_slugs_with_special_characters_cannot_change_the_path(self, srv, blog):
+        ok(srv, "get_post", slug="../admin?x=1")
+        assert blog.session.last["url"] == "http://blog.test/api/v1/posts/..%2Fadmin%3Fx%3D1"
+
+
+class TestUploadImage:
+    @pytest.mark.integration
+    def test_returns_markdown_ready_to_paste(self, srv, blog, tmp_path):
+        picture = tmp_path / "p.png"
+        picture.write_bytes(b"x")
+        blog.reply = lambda m, u, k: make_response(201, {"url": "/media/abc.png", "absolute_url": "http://blog.test/media/abc.png"})
+        result = ok(srv, "upload_image", file_path=str(picture), alt_text="A sunset")
+        assert result["markdown"] == "![A sunset](/media/abc.png)"
+
+    @pytest.mark.integration
+    def test_alt_text_cannot_break_the_markdown(self, srv, blog, tmp_path):
+        picture = tmp_path / "p.png"
+        picture.write_bytes(b"x")
+        blog.reply = lambda m, u, k: make_response(201, {"url": "/media/abc.png", "absolute_url": "x"})
+        result = ok(srv, "upload_image", file_path=str(picture), alt_text="a](http://evil.example)[b\nline")
+        assert result["markdown"] == "![a(http://evil.example)b line](/media/abc.png)"
+
+    @pytest.mark.integration
+    def test_missing_file(self, srv, blog):
+        assert "No file at /nope.png" in failure(srv, "upload_image", file_path="/nope.png")
+
+    @pytest.mark.integration
+    def test_the_blog_refusing_the_file_is_passed_on(self, srv, blog, tmp_path):
+        text = tmp_path / "t.png"
+        text.write_text("not an image")
+        blog.reply = lambda m, u, k: make_response(400, {"error": "Only PNG, JPEG, GIF, and WebP images can be uploaded"})
+        assert "PNG, JPEG, GIF, and WebP" in failure(srv, "upload_image", file_path=str(text))
 
 
 class TestErrors:
     @pytest.mark.integration
-    @pytest.mark.parametrize("name,arguments,message", [
-        ("get_post", {"slug": "ghost"}, "not found"),
-        ("publish_post", {"slug": "ghost"}, "not found"),
-        ("unpublish_post", {"slug": "ghost"}, "not found"),
-        ("update_post", {"slug": "ghost", "title": "x"}, "not found"),
-        ("replace_in_post", {"slug": "ghost", "find": "a", "replace": "b"}, "not found"),
-        ("create_post", {"title": "   "}, "title must not be empty"),
-        ("list_posts", {"status": "bogus"}, "status must be"),
-        ("search_posts", {"query": ""}, "query must not be empty"),
-        ("list_tags", {"status": "bogus"}, "status must be"),
+    @pytest.mark.parametrize("status,error", [
+        (404, "Post 'x' not found"), (409, "Slug 'x' is already in use"), (400, "title must not be empty"),
     ])
-    def test_expected_failures_are_clean_tool_errors(self, srv, name, arguments, message):
-        text = error_text(srv, name, **arguments)
-        assert message in text
-        assert "Traceback" not in text
+    def test_the_blogs_message_reaches_the_model_without_a_traceback(self, srv, blog, status, error):
+        blog.reply = lambda m, u, k: make_response(status, {"error": error})
+        text = failure(srv, "create_post", title="x")
+        assert error in text and "Traceback" not in text
 
     @pytest.mark.integration
-    def test_duplicate_slug(self, srv):
-        ok(srv, "create_post", title="One", slug="taken")
-        assert "already in use" in error_text(srv, "create_post", title="Two", slug="taken")
+    def test_a_rejected_token(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(401, {"error": "Missing or invalid API token"})
+        assert "BLOG_API_TOKEN" in failure(srv, "get_post", slug="x")
 
     @pytest.mark.integration
-    def test_update_with_nothing_to_change(self, srv):
-        ok(srv, "create_post", title="T")
-        assert "Nothing to update" in error_text(srv, "update_post", slug="t")
-
-    @pytest.mark.integration
-    def test_ambiguous_replace(self, srv):
-        ok(srv, "create_post", title="T", body="aa aa")
-        assert "2 times" in error_text(srv, "replace_in_post", slug="t", find="aa", replace="b")
-        assert ok(srv, "replace_in_post", slug="t", find="aa", replace="b", replace_all=True)["body"] == "b b"
+    def test_a_down_blog_tells_you_how_to_start_it(self, srv, blog):
+        blog.reply = lambda m, u, k: requests.exceptions.ConnectionError("refused")
+        assert "python blog/blog.py" in failure(srv, "create_post", title="x")
 
 
 class TestBlogInfo:
     @pytest.mark.integration
-    def test_reports_location_and_counts(self, srv):
-        ok(srv, "create_post", title="A", publish=True)
-        ok(srv, "create_post", title="B")
+    def test_running(self, srv, blog):
+        counts = {"total": 3, "published": 2, "drafts": 1, "tags": 4}
+        blog.reply = lambda m, u, k: make_response(200, {"title": "My Blog", "description": "d", "public": False,
+                                                         "url": "http://blog.test", "posts": counts})
         info = ok(srv, "get_blog_info")
-        assert info["viewer_url"] == srv._web.base_url
-        assert info["viewer_username"] == "owner"
-        assert info["data_dir"] == str(srv._client.data_dir)
-        assert info["posts"] == {"total": 2, "published": 1, "drafts": 1, "tags": 0}
+        assert info["blog_running"] is True and info["title"] == "My Blog" and info["posts"]["drafts"] == 1
+        assert info["public"] is False and info["blog_url"] == "http://blog.test"
 
     @pytest.mark.integration
-    def test_never_reveals_the_viewer_password(self, srv):
-        password = srv._web.password
+    def test_not_running_is_an_answer_not_a_failure(self, srv, blog):
+        blog.reply = lambda m, u, k: requests.exceptions.ConnectionError("refused")
         info = ok(srv, "get_blog_info")
-        assert password not in json.dumps(info)
-        assert info["password_source"].endswith("viewer_password")
-        post = ok(srv, "create_post", title="T", body="B")
-        assert password not in json.dumps(post)
+        assert info["blog_running"] is False and info["blog_url"] == "http://blog.test"
+        assert "python blog/blog.py" in info["message"]
 
     @pytest.mark.integration
-    def test_configured_password_source_is_named_not_shown(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("BLOG_PASSWORD", "hunter2-hunter2")
-        monkeypatch.setenv("BLOG_DIR", str(tmp_path / "blog"))
-        monkeypatch.setenv("BLOG_PORT", "0")
-        monkeypatch.setattr(BlogServer, "POLL_INTERVAL", 0.01)
-        spec = importlib.util.spec_from_file_location("blog_server_env_password", SERVER_PATH)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        try:
-            info = ok(module, "get_blog_info")
-            assert info["password_source"] == "BLOG_PASSWORD"
-            assert "hunter2" not in json.dumps(info)
-        finally:
-            module._web.stop()
-            sys.modules.pop(spec.name, None)
-
-
-class TestToolsAndViewerTogether:
-    @pytest.mark.integration
-    def test_a_post_created_through_a_tool_is_served_at_its_returned_url(self, srv):
-        post = ok(srv, "create_post", title="Seen in the viewer", body="Hello from the tool.", publish=True)
-        path = post["url"].removeprefix(srv._web.base_url)
-        status, _, body = fetch(srv._web, path)
-        assert status == 200
-        assert "Hello from the tool." in body
+    def test_a_wrong_token_is_still_an_error(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(401, {"error": "x"})
+        assert "API token" in failure(srv, "get_blog_info")
 
     @pytest.mark.integration
-    def test_the_returned_url_is_not_readable_without_the_password(self, srv):
-        post = ok(srv, "create_post", title="Private", body="secret text", publish=True)
-        path = post["url"].removeprefix(srv._web.base_url)
-        status, _, body = fetch(srv._web, path, authed=False)
-        assert status == 401
-        assert "secret text" not in body
+    def test_never_reveals_the_token(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(200, {"title": "t", "description": "", "public": False, "url": "http://blog.test",
+                                                         "posts": {"total": 0, "published": 0, "drafts": 0, "tags": 0}})
+        assert "test-token" not in json.dumps(ok(srv, "get_blog_info"))
+
+
+class TestStartupWarning:
+    @pytest.mark.integration
+    def test_plain_http_to_another_machine_warns_about_the_token(self, monkeypatch, tmp_path, capsys):
+        load_server(monkeypatch, tmp_path, url="http://blog.example.com:9901")
+        sys.modules.pop("blog_mcp_server_under_test", None)
+        assert "clear text" in capsys.readouterr().err
 
     @pytest.mark.integration
-    def test_edits_and_unpublishing_show_up_immediately(self, srv):
-        ok(srv, "create_post", title="Live", body="version one", publish=True)
-        assert "version one" in fetch(srv._web, "/post/live")[2]
-        ok(srv, "replace_in_post", slug="live", find="one", replace="two")
-        assert "version two" in fetch(srv._web, "/post/live")[2]
-        ok(srv, "unpublish_post", slug="live")
-        assert "Live" not in fetch(srv._web, "/")[2]
-        ok(srv, "delete_post", slug="live")
-        assert fetch(srv._web, "/post/live")[0] == 404
+    @pytest.mark.parametrize("url", ["http://127.0.0.1:9901", "http://localhost:9901", "https://blog.example.com"])
+    def test_loopback_and_https_do_not_warn(self, monkeypatch, tmp_path, capsys, url):
+        load_server(monkeypatch, tmp_path, url=url)
+        sys.modules.pop("blog_mcp_server_under_test", None)
+        assert "WARNING" not in capsys.readouterr().err

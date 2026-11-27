@@ -1,11 +1,11 @@
 [project]
 name = "blog-mcp"
 version = "0.1.0"
-description = "FastMCP server for managing a private, password-protected blog."
+description = "FastMCP server for managing a blog through its JSON API."
 requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=4.0.4",
-    "markdown-it-py>=4.3.0",
+    "requests>=2.34.2",
     "python-dotenv>=1.2.3",
 ]
 

@@ -1,8 +1,7 @@
 """
-Blog client module for storing, rendering, and serving a private blog.
+Blog client module for managing a blog through its JSON API.
 """
 
-from .client import BlogClient, BlogError
-from .web import BlogServer
+from .client import BlogClient, BlogError, BlogUnreachable
 
-__all__ = ["BlogClient", "BlogError", "BlogServer"]
+__all__ = ["BlogClient", "BlogError", "BlogUnreachable"]

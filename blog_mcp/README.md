@@ -1,23 +1,19 @@
 # Blog MCP Server (FastMCP)
 
-FastMCP server for running a private blog. An AI assistant writes and manages posts through MCP tools; you read them on a built-in, password-protected web page. Posts are Markdown, kept in a local SQLite file. No API key and no external service required.
+FastMCP server that lets an AI assistant manage a [blog](../blog/README.md): write, edit, publish, search, and delete posts, and upload images. The blog is a separate program with its own website and editor. This server only talks to it through its JSON API, so the blog works fine with this server off, and you can keep editing in the browser while an assistant edits too.
 
 ## Quickstart
 
 ```bash
 # From the repo root (mcp/)
+pip install -r blog/requirements.txt
+python blog/blog.py                      # the blog; leave it running
+
 pip install -r blog_mcp/requirements.txt
-cp blog_mcp/.env.example blog_mcp/.env   # optional; the defaults work
-python blog_mcp/server.py
+python blog_mcp/server.py                # the MCP server
 ```
 
-The MCP server runs on HTTP transport at `127.0.0.1:9900` by default, and the blog viewer at `http://127.0.0.1:9901`.
-
-On first start the server generates a viewer password and stores it in `~/mcp-blog/viewer_password`. Log in as `owner` with that password:
-
-```bash
-cat ~/mcp-blog/viewer_password
-```
+The MCP server runs on HTTP transport at `127.0.0.1:9900` by default. When the blog runs on the same computer with default settings, the server finds the blog's API token by itself; otherwise set `BLOG_URL` and `BLOG_API_TOKEN` (see [Configuration](#configuration)).
 
 ## Tools
 
@@ -25,6 +21,7 @@ cat ~/mcp-blog/viewer_password
 - **`create_post`** — Create a post from Markdown. Saved as a draft unless `publish` is true.
 - **`update_post`** — Change a post's title, body, summary, tags, or slug.
 - **`replace_in_post`** — Find and replace text in a post body without resending the whole post.
+- **`upload_image`** — Upload an image from this computer and get Markdown to put in a post.
 
 ### Publishing
 - **`publish_post`** — Make a draft visible on the blog's home page.
@@ -36,22 +33,7 @@ cat ~/mcp-blog/viewer_password
 - **`list_posts`** — List posts (no bodies), filtered by status or tag, with paging.
 - **`search_posts`** — Search titles, summaries, bodies, and tags, with match snippets.
 - **`list_tags`** — List all tags with post counts.
-- **`get_blog_info`** — Blog title, viewer address, storage location, and post counts.
-
-## Privacy Model
-
-- **Password on every page.** The viewer uses HTTP Basic authentication for every request, drafts included. Passwords are compared in constant time and failed logins are slowed down.
-- **Local by default.** The viewer binds to `127.0.0.1`. To reach it from another machine, set `BLOG_HOST` and enable HTTPS with `BLOG_TLS_CERT`/`BLOG_TLS_KEY`; the server warns on startup if you bind a non-loopback address without TLS.
-- **Password stays out of tool output.** `get_blog_info` says where the password is kept but never returns it, so it is never sent to the model.
-- **No indexing, no scripts.** Pages send `noindex`, `no-store`, and `no-referrer` headers and a Content-Security-Policy that blocks all scripts. Raw HTML in a post is shown as text, and `javascript:` links are not rendered as links.
-- **Owner-only files.** A newly created data directory is `0700`; the database and password file are `0600`.
-
-What it does not do:
-
-- The MCP endpoint on port 9900 has no authentication, like the other servers in this repo. Anyone who can reach it can read and write every post. Keep it on `127.0.0.1`.
-- The database is not encrypted at rest. Use disk encryption if that matters to you.
-- Whatever MCP client you connect sees the posts it reads and writes. With a hosted model, that text goes to its provider. Pair this with a local model (for example through `subagent_mcp`) to keep posts entirely on your machine.
-- A post that embeds an `https://` image makes your browser fetch it from that host.
+- **`get_blog_info`** — Whether the blog is running, its address, title, and post counts.
 
 ## Configuration
 
@@ -59,28 +41,31 @@ Copy `.env.example` to `.env` and edit as needed.
 
 | Variable | Default | Description |
 |---|---|---|
-| `BLOG_DIR` | `~/mcp-blog` | Directory for the database and generated password |
-| `BLOG_TITLE` | `Private Blog` | Blog name shown in the viewer |
-| `BLOG_DESCRIPTION` | *(empty)* | Tagline shown under the title |
-| `BLOG_HOST` | `127.0.0.1` | Viewer bind address |
-| `BLOG_PORT` | `9901` | Viewer port |
-| `BLOG_USERNAME` | `owner` | Viewer login name |
-| `BLOG_PASSWORD` | *(generated)* | Viewer password; leave unset to generate one into `$BLOG_DIR/viewer_password` |
-| `BLOG_TLS_CERT` / `BLOG_TLS_KEY` | *(none)* | PEM certificate and key to serve the viewer over HTTPS |
+| `BLOG_URL` | `http://127.0.0.1:9901` | Address of the blog |
+| `BLOG_API_TOKEN` | *(from file)* | The blog's API token. If unset, read from `$BLOG_DIR/api_token` |
+| `BLOG_DIR` | `~/mcp-blog` | Only used to find the token file when the blog is on this computer |
+| `BLOG_TIMEOUT` | `30` | Seconds to wait for the blog |
+| `BLOG_VERIFY_TLS` | `true` | Set `false` to accept a self-signed HTTPS certificate |
+
+To manage a blog on another machine, set `BLOG_URL` to its `https://` address and `BLOG_API_TOKEN` to its token. The server warns on startup if you point it at plain `http://` on another machine, because the token would cross the network in clear text.
+
+## How It Behaves
+
+- **The blog must be running** for tools to work. If it is not, tools fail with a message saying how to start it, and `get_blog_info` reports `blog_running: false` instead of failing.
+- **Nothing is stored here.** Posts, images, and passwords live in the blog. This server keeps no data and never sees the login password.
+- **Safe with browser edits.** The blog refuses edits based on stale information. If you and an assistant edit the same post at once, the browser editor warns you and keeps your text.
+- **Redirects are not followed**, so the API token is never sent anywhere other than the address you configured.
+- Errors from the blog come through as short messages the assistant can act on (for example `Post 'x' not found`).
 
 ## Code Structure
 
-- `blog_client/client.py`: `BlogClient` — SQLite storage, validation, search, and tags.
-- `blog_client/render.py`: Markdown rendering (raw HTML escaped) and plain-text helpers.
-- `blog_client/pages.py`: HTML templates for the viewer.
-- `blog_client/web.py`: `BlogServer` — the password-protected viewer.
+- `blog_client/client.py`: `BlogClient` — calls the blog's API with `requests` and turns failures into clear errors.
 - `server.py`: FastMCP tool definitions.
 
 ## Notes
 
-- Posts are identified by slug. A slug is derived from the title, made unique with a numeric suffix, and can be set or renamed explicitly.
-- `published_at` records when a post was first published; unpublishing and republishing keeps it.
+- Posts are identified by slug. `create_post` returns it, and `list_posts` shows it for every post.
+- Every post the tools return includes a `url`. It opens on the blog, behind its login unless the blog is public.
 - Tags are lowercased and joined with hyphens (`"Machine Learning"` becomes `machine-learning`).
-- The viewer is read-only. Everything is edited through the MCP tools.
 - See `server.py` for transport options (HTTP, SSE, stdio).
 - More detail: [`docs/configuration.md`](docs/configuration.md), [`docs/tools.md`](docs/tools.md), [`docs/examples.md`](docs/examples.md).

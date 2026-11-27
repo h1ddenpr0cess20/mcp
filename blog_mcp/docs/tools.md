@@ -18,6 +18,7 @@ Posts are identified by their **slug**, a short URL-safe name such as `my-first-
 - [delete\_post](#delete_post)
 - [search\_posts](#search_posts)
 - [list\_tags](#list_tags)
+- [upload\_image](#upload_image)
 - [get\_blog\_info](#get_blog_info)
 - [The Post Object](#the-post-object)
 - [Error Handling](#error-handling)
@@ -42,11 +43,6 @@ Create a post. It is saved as a draft unless `publish` is true.
 **Returns**
 
 A [post object](#the-post-object) including `body` and `url`.
-
-**Use cases**
-
-- Drafting a post for you to review before it goes live.
-- Publishing a quick note in one call.
 
 ---
 
@@ -88,11 +84,6 @@ List posts without their bodies. Published posts are ordered by publish date, dr
 | limit  | integer | Limit applied |
 | offset | integer | Offset applied |
 
-**Use cases**
-
-- "What drafts do I have?"
-- Paging through everything with `offset` until `offset + limit >= total`.
-
 ---
 
 ## update\_post
@@ -115,10 +106,7 @@ Change a post. Any field left empty is not modified, and at least one field must
 
 The updated [post object](#the-post-object) including `body` and `url`.
 
-**Use cases**
-
-- Rewriting a draft after feedback.
-- Retagging a post. To change only a sentence, prefer [replace\_in\_post](#replace_in_post).
+To change only a sentence, prefer [replace\_in\_post](#replace_in_post).
 
 ---
 
@@ -137,7 +125,7 @@ Find and replace text in a post's body, so a small edit to a long post does not 
 
 **Returns**
 
-The updated [post object](#the-post-object) including `body` and `url`, plus `replacements` (the number of occurrences replaced).
+The updated [post object](#the-post-object), plus `replacements` (the number of occurrences replaced).
 
 The call fails, and the post is left unchanged, if `find` is not present, or if it appears more than once and `replace_all` is false. Include surrounding words in `find` to make it unique.
 
@@ -161,7 +149,7 @@ The updated [post object](#the-post-object) with `status` `"published"`. `publis
 
 ## unpublish\_post
 
-Return a published post to draft so it leaves the home page. The post is still viewable by direct address behind the password.
+Return a published post to draft so it leaves the home page.
 
 **Parameters**
 
@@ -235,23 +223,46 @@ List every tag with the number of posts using it, most used first.
 
 ---
 
-## get\_blog\_info
+## upload\_image
 
-Get the blog's title, viewer address, storage location, and post counts. Takes no parameters.
+Upload an image file from the computer this server runs on, so a post can show it. PNG, JPEG, GIF, and WebP up to 8 MB. The blog checks the file's contents, so a file that is not really an image is refused whatever it is called.
+
+**Parameters**
+
+| Parameter | Type   | Required | Default | Description |
+|-----------|--------|----------|---------|-------------|
+| file_path | string | yes      | —       | Path of the image on the machine running this server. `~` is expanded. |
+| alt_text  | string | no       | `""`    | Short description for screen readers. |
 
 **Returns**
 
-| Field           | Type   | Description |
-|-----------------|--------|-------------|
-| title           | string | Blog title |
-| description     | string | Blog tagline |
-| viewer_url      | string | Address of the viewer |
-| viewer_username | string | Login name |
-| password_source | string | `"BLOG_PASSWORD"`, or the path of the file holding the generated password |
-| data_dir        | string | Where the database lives |
-| posts           | object | `total`, `published`, `drafts`, and `tags` counts |
+| Field        | Type   | Description |
+|--------------|--------|-------------|
+| url          | string | The image's address on the blog, e.g. `/media/ab12….png` |
+| absolute_url | string | The same with the blog's full address |
+| markdown     | string | `![alt](url)`, ready to paste into a post body |
 
-The password itself is never returned. Read it from the file named in `password_source`, or from your `.env`.
+On a private blog the image is only visible to logged-in readers, like everything else.
+
+---
+
+## get\_blog\_info
+
+Check the blog. Takes no parameters.
+
+**Returns**
+
+| Field       | Type    | Description |
+|-------------|---------|-------------|
+| blog_url    | string  | The blog's address |
+| blog_running | boolean | Whether the blog answered |
+| title       | string  | Blog title (when running) |
+| description | string  | Tagline (when running) |
+| public      | boolean | Whether visitors can read published posts without logging in (when running) |
+| posts       | object  | `total`, `published`, `drafts`, and `tags` counts (when running) |
+| message     | string  | Why the blog could not be reached (only when `blog_running` is false) |
+
+This tool reports a blog that is down as an answer rather than failing. A rejected API token is still an error.
 
 ---
 
@@ -265,25 +276,29 @@ The password itself is never returned. Read it from the file named in `password_
 | tags         | list[string] | Tags, alphabetical |
 | summary      | string       | The explicit summary, or an excerpt of the opening paragraphs |
 | word_count   | integer      | Words in the body, not counting Markdown syntax |
+| version      | integer      | Starts at 1 and rises with every change |
 | created_at   | string       | UTC timestamp, e.g. `2026-11-27T14:30:00Z` |
 | updated_at   | string       | UTC timestamp of the last change |
 | published_at | string/null  | UTC timestamp of first publication; `null` if never published |
 | body         | string       | Markdown source (only from tools that return full posts) |
-| url          | string       | Viewer address of the post; requires the viewer password |
+| url          | string       | The post's address on the blog |
 
 ---
 
 ## Error Handling
 
-Invalid input, a missing post, or a name conflict makes the tool call fail with a short message the model can act on, for example:
+A problem makes the tool call fail with a short message the model can act on:
 
 | Situation | Message |
 |-----------|---------|
+| Blog not running | `Cannot reach the blog at http://127.0.0.1:9901. Is it running? Start it with python blog/blog.py, or fix BLOG_URL.` |
+| Wrong token | `The blog rejected the API token. Check BLOG_API_TOKEN against the blog's api_token.` |
 | Unknown slug | `Post 'x' not found` |
 | Blank title | `title must not be empty` |
 | Slug already used | `Slug 'x' is already in use` |
 | Ambiguous `find` | `The text appears 2 times; add surrounding context to make it unique or set replace_all` |
-| Bad `status` | `status must be 'all', 'draft', or 'published'` |
 | `update_post` with no changes | `Nothing to update: pass at least one field to change` |
+| Missing local file | `No file at /path/to/image.png` |
+| Not an image | `Only PNG, JPEG, GIF, and WebP images can be uploaded` |
 
 Failures never partly apply: a rejected create or update leaves the blog exactly as it was.

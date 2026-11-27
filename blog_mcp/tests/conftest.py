@@ -1,70 +1,48 @@
-import base64
-import http.client
-import ssl
-from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
+import requests
 
-from blog_client import BlogClient, BlogServer
+from blog_client import BlogClient
 
-USERNAME = "owner"
-PASSWORD = "correct horse battery staple"
+
+def make_response(status: int = 200, data=None, text: str | None = None, headers: dict | None = None) -> requests.Response:
+    """A real requests.Response, so the client is tested against the same type it gets in production."""
+    response = requests.Response()
+    response.status_code = status
+    response._content = (text if text is not None else json.dumps(data)).encode("utf-8")
+    response.headers.update({"Content-Type": "application/json", **(headers or {})})
+    return response
+
+
+class FakeSession:
+    """Stands in for requests.Session: records each call and answers from `responder(method, url, kwargs)`.
+
+    The responder returns a Response, or an exception to raise."""
+
+    def __init__(self, responder):
+        self.responder = responder
+        self.calls: list[dict] = []
+
+    def request(self, method, url, **kwargs):
+        self.calls.append({"method": method, "url": url, **kwargs})
+        result = self.responder(method, url, kwargs)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    @property
+    def last(self) -> dict:
+        return self.calls[-1]
 
 
 @pytest.fixture
-def blog(tmp_path):
-    """A BlogClient backed by an empty database in a temp directory."""
-    return BlogClient(data_dir=str(tmp_path / "blog"))
+def make_client():
+    """Build (client, session) where every request is answered by `responder`."""
 
+    def build(responder=lambda method, url, kwargs: make_response(200, {}), **options):
+        session = FakeSession(responder)
+        settings = {"base_url": "http://blog.test", "token": "test-token", "session": session, **options}
+        return BlogClient(**settings), session
 
-@pytest.fixture
-def clock(monkeypatch):
-    """Freeze blog timestamps; call the returned function to move time forward."""
-    state = {"now": datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)}
-
-    def fake_now():
-        return state["now"].strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    def advance(minutes: int = 1):
-        state["now"] += timedelta(minutes=minutes)
-
-    monkeypatch.setattr("blog_client.client._now", fake_now)
-    return advance
-
-
-@pytest.fixture
-def viewer(blog):
-    """A running viewer on an ephemeral port with known credentials."""
-    server = BlogServer(
-        blog, host="127.0.0.1", port=0, username=USERNAME, password=PASSWORD,
-        title="Test Blog", description="Notes for testing",
-    )
-    server.AUTH_FAIL_DELAY = 0
-    server.POLL_INTERVAL = 0.01
-    server.start()
-    yield server
-    server.stop()
-
-
-def basic_auth(user: str = USERNAME, password: str = PASSWORD) -> dict:
-    token = base64.b64encode(f"{user}:{password}".encode()).decode()
-    return {"Authorization": f"Basic {token}"}
-
-
-def fetch(server, path: str, headers: dict | None = None, method: str = "GET", authed: bool = True):
-    """Make a request to the viewer with the server's own credentials. Returns (status, headers, body_text)."""
-    all_headers = {**(basic_auth(server.username, server.password) if authed else {}), **(headers or {})}
-    if server.scheme == "https":
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        conn = http.client.HTTPSConnection("127.0.0.1", server.port, timeout=10, context=context)
-    else:
-        conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
-    try:
-        conn.request(method, path, headers=all_headers)
-        response = conn.getresponse()
-        body = response.read().decode("utf-8")
-        return response.status, {k.lower(): v for k, v in response.getheaders()}, body
-    finally:
-        conn.close()
+    return build

@@ -2,7 +2,7 @@
 
 import pytest
 
-from blog_client.render import make_excerpt, plain_text, render_markdown, word_count
+from blog_app.render import make_excerpt, plain_text, render_markdown, word_count
 
 
 class TestRenderMarkdown:
@@ -94,6 +94,16 @@ class TestMakeExcerpt:
     @pytest.mark.unit
     def test_falls_back_to_plain_text_when_no_paragraphs(self):
         assert make_excerpt("# Only a heading") == "Only a heading"
+
+    @pytest.mark.unit
+    def test_ignores_list_items_quotes_code_and_tables(self):
+        text = ("Opening paragraph.\n\n## Heading\n\n- first item\n- second item\n\n> a quoted line\n\n"
+                "```\ncode here\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n")
+        assert make_excerpt(text) == "Opening paragraph."
+
+    @pytest.mark.unit
+    def test_does_not_borrow_a_list_when_the_post_starts_with_one(self):
+        assert make_excerpt("- only a list\n- of items") == "only a list of items"  # falls back to the plain text
 
     @pytest.mark.unit
     def test_empty(self):

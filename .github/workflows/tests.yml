@@ -42,6 +42,7 @@ jobs:
       matrix:
         server:
           - android_mcp
+          - blog
           - blog_mcp
           - colab_shell_mcp
           - docker_shell_mcp

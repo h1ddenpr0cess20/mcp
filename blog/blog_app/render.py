@@ -6,7 +6,7 @@ from markdown_it import MarkdownIt
 
 # Raw HTML in a post is escaped rather than passed through, and markdown-it
 # refuses javascript:/vbscript:/file: links, so a post can never inject script
-# into the viewer even when its text came from an untrusted source.
+# into the blog even when its text came from an untrusted source.
 _md = MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False}).enable(["table", "strikethrough"])
 
 
@@ -57,7 +57,8 @@ def make_excerpt(text: str, limit: int = 200) -> str:
     paragraphs = []
     length = 0
     for index, token in enumerate(tokens):
-        if token.type == "inline" and index > 0 and tokens[index - 1].type == "paragraph_open":
+        # Top-level paragraphs only: list items and quotes also contain paragraphs, but they are not an introduction.
+        if token.type == "inline" and index > 0 and tokens[index - 1].type == "paragraph_open" and tokens[index - 1].level == 0:
             paragraph = _inline_text(token).strip()
             if paragraph:
                 paragraphs.append(paragraph)
