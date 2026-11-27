@@ -22,7 +22,7 @@ How to install, run, host, and back up the blog.
 
 ## Requirements
 
-- Python 3.10 or later
+- Python 3.11 or later
 - No accounts, API keys, or external services
 
 ---
@@ -167,6 +167,7 @@ Image addresses are long random names, so in public mode an image is readable by
 |---------------------------------|-------------|-------------|
 | `BLOG_HOST`                     | `127.0.0.1` | Address to listen on |
 | `BLOG_PORT`                     | `9901`      | Port |
+| `BLOG_ALLOWED_HOSTS`            | `127.0.0.1,localhost` | Comma-separated HTTP Host allowlist |
 | `BLOG_TLS_CERT`, `BLOG_TLS_KEY` | *(none)*    | PEM files; set both to serve HTTPS |
 
 Set `BLOG_HOST=0.0.0.0` to listen on every network interface. A login sends the password, so on any network other than your own computer it must travel over HTTPS. Either use the options below, or reach the blog through an SSH tunnel or a VPN you trust.
@@ -202,7 +203,10 @@ Set the address the API should use in links:
 
 ```
 BLOG_PUBLIC_URL=https://blog.example.com
+BLOG_ALLOWED_HOSTS=blog.example.com,127.0.0.1,localhost
 ```
+
+The app rejects requests whose `Host` header is not in `BLOG_ALLOWED_HOSTS`; list each public hostname and any hostname or LAN IP your proxy/client actually sends. Do not use `*` on an internet-facing deployment. `BLOG_PUBLIC_URL` fixes canonical links to the intended origin instead of reflecting request headers.
 
 The blog trusts `X-Forwarded-Proto` and `X-Forwarded-For` only from `127.0.0.1` (uvicorn's default; change it with the `FORWARDED_ALLOW_IPS` environment variable). That is what makes the session cookie `Secure` over HTTPS and makes login lockouts apply to each visitor rather than to the proxy.
 

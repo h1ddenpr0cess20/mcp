@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -59,6 +60,11 @@ CREATE TABLE IF NOT EXISTS attachments (
     UNIQUE (post_id, filename)
 );
 CREATE INDEX IF NOT EXISTS idx_attachments_post ON attachments(post_id);
+CREATE TABLE IF NOT EXISTS login_sessions (
+    id         TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_login_sessions_expires_at ON login_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_post_tags_tag ON post_tags(tag);
 CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
 """
@@ -530,3 +536,29 @@ class BlogStore:
             "drafts": by_status.get("draft", 0),
             "tags": tag_count,
         }
+
+    # --- login sessions ----------------------------------------------------
+
+    def create_login_session(self, session_id: str, expires_at: int) -> None:
+        """Register a newly issued browser session so it can be revoked on logout."""
+        with self._db() as conn:
+            now = int(time.time())
+            conn.execute("DELETE FROM login_sessions WHERE expires_at <= ?", (now,))
+            conn.execute(
+                "INSERT INTO login_sessions (id, expires_at) VALUES (?, ?)",
+                (session_id, int(expires_at)),
+            )
+
+    def has_login_session(self, session_id: str) -> bool:
+        """Return whether this signed session is still registered and unexpired."""
+        with self._db() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM login_sessions WHERE id = ? AND expires_at > ?",
+                (session_id, int(time.time())),
+            ).fetchone()
+            return row is not None
+
+    def revoke_login_session(self, session_id: str) -> None:
+        """Invalidate one session, including copies of its signed cookie."""
+        with self._db() as conn:
+            conn.execute("DELETE FROM login_sessions WHERE id = ?", (session_id,))

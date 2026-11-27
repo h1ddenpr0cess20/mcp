@@ -40,6 +40,7 @@ class TestSettings:
     def test_defaults(self, tmp_path):
         s = Settings(data_dir=tmp_path)
         assert (s.host, s.port, s.username, s.title, s.public) == ("127.0.0.1", 9901, "owner", "Private Blog", False)
+        assert s.allowed_hosts == ["127.0.0.1", "localhost"]
 
     @pytest.mark.unit
     @pytest.mark.parametrize("username", ["", "a:b"])
@@ -66,15 +67,22 @@ class TestSettings:
         assert Settings(data_dir=tmp_path, public_url="https://blog.example.com/").public_url == "https://blog.example.com"
 
     @pytest.mark.unit
+    def test_allowed_hosts_cannot_be_empty(self, tmp_path):
+        with pytest.raises(ValueError, match="BLOG_ALLOWED_HOSTS"):
+            Settings(data_dir=tmp_path, allowed_hosts=[])
+
+    @pytest.mark.unit
     def test_from_env(self, tmp_path, monkeypatch):
         for name, value in {"BLOG_DIR": str(tmp_path), "BLOG_HOST": "0.0.0.0", "BLOG_PORT": "1234", "BLOG_TITLE": "T",
                             "BLOG_DESCRIPTION": "D", "BLOG_USERNAME": "me", "BLOG_PASSWORD": "pw", "BLOG_PUBLIC": "true",
-                            "BLOG_PUBLIC_URL": "https://x.example/", "BLOG_API_TOKEN": "tok", "BLOG_PASSWORD_HASH": "h"}.items():
+                            "BLOG_PUBLIC_URL": "https://x.example/", "BLOG_ALLOWED_HOSTS": "blog.example.com, localhost",
+                            "BLOG_API_TOKEN": "tok", "BLOG_PASSWORD_HASH": "h"}.items():
             monkeypatch.setenv(name, value)
         s = Settings.from_env()
         assert (s.host, s.port, s.title, s.description, s.username, s.password, s.public, s.public_url, s.api_token) == (
             "0.0.0.0", 1234, "T", "D", "me", "pw", True, "https://x.example", "tok")
         assert s.password_hash == "h"
+        assert s.allowed_hosts == ["blog.example.com", "localhost"]
 
     @pytest.mark.unit
     @pytest.mark.parametrize("value,expected", [("true", True), ("1", True), ("YES", True), ("on", True),

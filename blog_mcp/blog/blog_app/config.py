@@ -2,7 +2,7 @@
 
 import os
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -41,6 +41,7 @@ class Settings:
     password_hash: str = ""  # from BLOG_PASSWORD_HASH: a hash made by `blog.py hash-password`; wins over `password`
     public: bool = False  # True: published posts are readable without logging in
     public_url: str = ""  # absolute address used in links returned by the API; default: taken from the request
+    allowed_hosts: list[str] = field(default_factory=lambda: ["127.0.0.1", "localhost"])
     api_token: str = ""  # empty: generated into data_dir/api_token
     max_attachment_mb: int = 25  # largest file that can be attached to a post
     tls_cert: str = ""
@@ -55,6 +56,11 @@ class Settings:
         if bool(self.tls_cert) != bool(self.tls_key):
             raise ValueError("BLOG_TLS_CERT and BLOG_TLS_KEY must be set together")
         self.public_url = self.public_url.rstrip("/")
+        self.allowed_hosts = list(dict.fromkeys(
+            host.strip().lower() for host in self.allowed_hosts if isinstance(host, str) and host.strip()
+        ))
+        if not self.allowed_hosts:
+            raise ValueError("BLOG_ALLOWED_HOSTS must contain at least one host")
         if not 1 <= self.max_attachment_mb <= 2048:
             raise ValueError("BLOG_MAX_ATTACHMENT_MB must be between 1 and 2048")
 
@@ -75,6 +81,7 @@ class Settings:
             password_hash=os.getenv("BLOG_PASSWORD_HASH", ""),
             public=_flag("BLOG_PUBLIC"),
             public_url=os.getenv("BLOG_PUBLIC_URL", ""),
+            allowed_hosts=[host.strip() for host in os.getenv("BLOG_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if host.strip()],
             api_token=os.getenv("BLOG_API_TOKEN", ""),
             max_attachment_mb=int(os.getenv("BLOG_MAX_ATTACHMENT_MB", "25")),
             tls_cert=os.getenv("BLOG_TLS_CERT", ""),

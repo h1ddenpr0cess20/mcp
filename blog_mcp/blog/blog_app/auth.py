@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from collections.abc import Callable
@@ -52,7 +53,13 @@ class Auth:
 
     def new_session(self) -> tuple[str, dict]:
         """Return (cookie value, session data) for a fresh login."""
-        data = {"u": self.username, "csrf": secrets.token_urlsafe(24), "exp": int(time.time()) + SESSION_SECONDS, "v": self._fingerprint}
+        data = {
+            "u": self.username,
+            "sid": secrets.token_hex(32),
+            "csrf": secrets.token_urlsafe(24),
+            "exp": int(time.time()) + SESSION_SECONDS,
+            "v": self._fingerprint,
+        }
         raw = _b64(json.dumps(data, separators=(",", ":")).encode("utf-8"))
         return f"{raw}.{self._sign(raw)}", data
 
@@ -70,6 +77,9 @@ class Auth:
         if not isinstance(data, dict) or data.get("exp", 0) < time.time():
             return None
         if data.get("u") != self.username or not _same(str(data.get("v", "")), self._fingerprint):
+            return None
+        session_id = data.get("sid")
+        if not isinstance(session_id, str) or re.fullmatch(r"[0-9a-f]{64}", session_id) is None:
             return None
         return data
 
