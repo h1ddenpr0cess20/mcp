@@ -22,6 +22,14 @@ def load_or_create_secret(path: Path, nbytes: int = 24) -> str:
     return value
 
 
+def has_secret(path: Path) -> bool:
+    """True if a non-empty secret is already stored at `path`."""
+    try:
+        return bool(path.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
 def _flag(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None or not value.strip():

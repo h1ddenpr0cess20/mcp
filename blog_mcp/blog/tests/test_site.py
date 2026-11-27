@@ -3,12 +3,13 @@
 import asyncio
 import http.client
 import re
+from dataclasses import replace
 
 import pytest
 from starlette.exceptions import HTTPException
 
 from blog_app.app import BodyLimit, safe_next
-from tests.conftest import GIF, JPEG, PASSWORD, PNG, USERNAME
+from tests.conftest import GIF, JPEG, PASSWORD, PNG, USERNAME, RunningBlog
 
 READING_ROUTES = ["/", "/post/anything", "/tag/x", "/tags", "/search", "/search?q=a"]
 ADMIN_GET_ROUTES = ["/admin", "/admin/new", "/admin/edit/anything"]
@@ -271,25 +272,18 @@ class TestLogin:
         assert admin.get("/admin").status == 303
 
     @pytest.mark.integration
-    def test_a_session_survives_a_server_restart_but_not_a_password_change(self, make_site, tmp_path):
+    def test_a_session_survives_a_server_restart_but_not_a_password_change(self, make_site):
         first = make_site()
-        browser = first.admin()
-        cookie = browser.cookies["blog_session"]
+        cookie = first.admin().cookies["blog_session"]
         first.stop()
-        again = first.__class__(first.settings.__class__(**{**first.settings.__dict__, "port": first.port + 0}))
-        try:
-            restored = again.browser()
-            restored.cookies["blog_session"] = cookie
-            assert restored.get("/admin").status == 200
-        finally:
-            again.stop()
-        changed = first.__class__(first.settings.__class__(**{**first.settings.__dict__, "password": "a different password"}))
-        try:
-            old = changed.browser()
-            old.cookies["blog_session"] = cookie
-            assert old.get("/admin").status == 303
-        finally:
-            changed.stop()
+        for password, still_logged_in in ((PASSWORD, True), ("a different password", False)):
+            restarted = RunningBlog(replace(first.settings, password=password))
+            try:
+                browser = restarted.browser()
+                browser.cookies["blog_session"] = cookie
+                assert (browser.get("/admin").status == 200) is still_logged_in, password
+            finally:
+                restarted.stop()
 
 
 class TestAdminAccess:

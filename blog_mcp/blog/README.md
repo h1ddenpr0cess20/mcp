@@ -10,7 +10,7 @@ pip install -r blog_mcp/blog/requirements.txt
 python blog_mcp/blog/blog.py
 ```
 
-Open `http://127.0.0.1:9901` and log in as `owner`. On first start the blog generates a password and keeps it in `~/mcp-blog/blog_password`:
+Open `http://127.0.0.1:9901` and log in as `owner`. The first time the blog starts it generates a password, **prints it in the terminal (only that once)**, and saves it to `~/mcp-blog/blog_password`. If you missed it:
 
 ```bash
 cat ~/mcp-blog/blog_password

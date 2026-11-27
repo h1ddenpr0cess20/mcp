@@ -73,13 +73,18 @@ cp blog_mcp/blog/.env.example blog_mcp/blog/.env
 python blog_mcp/blog/blog.py
 ```
 
-It prints where it is running and where the login details are kept:
+The first time it starts, it prints your login, including the generated password, once:
 
 ```
 [blog] 'Private Blog' is running at http://127.0.0.1:9901  (private: everything needs a login)
-[blog] log in as 'owner'; password: /home/you/mcp-blog/blog_password
-[blog] API token for the MCP server: /home/you/mcp-blog/api_token
+[blog] Log in with:
+[blog]     username: owner
+[blog]     password: <your generated password>
+[blog] That password was just generated and saved to /home/you/mcp-blog/blog_password. It is only printed this once.
+[blog] The MCP server uses the API token in the file /home/you/mcp-blog/api_token
 ```
+
+On later starts it only says where the password is stored. The password is printed only when the blog is started from an interactive terminal, never into a log or a service's output, so if you run it as a service, read the password from the file.
 
 Stop it with `Ctrl+C`. If the port is already in use it stops with an error instead of starting twice; change `BLOG_PORT`.
 

@@ -561,16 +561,16 @@ class TestVersioningAndConflicts:
         def require_then_get_overtaken(conn, slug):
             row = original(conn, slug)
             # Another writer commits between our read and our write.
-            other = __import__("sqlite3").connect(blog.db_path)
+            other = sqlite3.connect(blog.db_path)
             other.execute("UPDATE posts SET version = version + 1, body = 'other writer' WHERE slug = ?", (slug,))
             other.commit()
             other.close()
             return row
 
-        monkeypatch.setattr(BlogStore, "_require", staticmethod(require_then_get_overtaken))
-        with pytest.raises(Conflict, match="same moment"):
-            blog.update_post("t", body="mine")
-        monkeypatch.undo()
+        with monkeypatch.context() as patched:
+            patched.setattr(BlogStore, "_require", staticmethod(require_then_get_overtaken))
+            with pytest.raises(Conflict, match="same moment"):
+                blog.update_post("t", body="mine")
         assert blog.get_post("t")["body"] == "other writer"
 
     @pytest.mark.unit
