@@ -64,7 +64,7 @@ class BlogServer:
     ):
         self.client = client
         self.host = host if host is not None else os.getenv("BLOG_HOST", "127.0.0.1")
-        self.port = port if port is not None else int(os.getenv("BLOG_PORT", "9411"))
+        self.port = port if port is not None else int(os.getenv("BLOG_PORT", "9901"))
         self.username = username if username is not None else os.getenv("BLOG_USERNAME", "owner")
         if not self.username or ":" in self.username:
             raise ValueError("BLOG_USERNAME must be non-empty and must not contain ':'")

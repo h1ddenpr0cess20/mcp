@@ -75,7 +75,7 @@ python blog_mcp/server.py
 On startup the server prints the viewer address and where the password is kept:
 
 ```
-[blog] viewer: http://127.0.0.1:9411  (user: owner, password: /home/you/mcp-blog/viewer_password)
+[blog] viewer: http://127.0.0.1:9901  (user: owner, password: /home/you/mcp-blog/viewer_password)
 ```
 
 ---
@@ -121,7 +121,7 @@ The viewer never starts without a password.
 | Variable                       | Default     | Description |
 |--------------------------------|-------------|-------------|
 | `BLOG_HOST`                    | `127.0.0.1` | Bind address |
-| `BLOG_PORT`                    | `9411`      | Port |
+| `BLOG_PORT`                    | `9901`      | Port |
 | `BLOG_TLS_CERT`, `BLOG_TLS_KEY` | *(none)*   | PEM files; set both to serve HTTPS |
 
 HTTP Basic authentication sends the password with every request, so on any network other than loopback it must travel over HTTPS. To read the blog from your phone or another computer:
@@ -140,7 +140,7 @@ BLOG_TLS_KEY=~/mcp-blog/blog.key
 
 If you bind a non-loopback address without a certificate, the server still starts but prints a warning. Another option is to keep the viewer on loopback and reach it through an SSH tunnel or a VPN you already trust.
 
-Only the viewer is affected by these settings. The MCP endpoint (port 9410) stays on `127.0.0.1` and is not password-protected; do not expose it.
+Only the viewer is affected by these settings. The MCP endpoint (port 9900) stays on `127.0.0.1` and is not password-protected; do not expose it.
 
 ---
 
@@ -151,10 +151,10 @@ The active transport is set in the `__main__` block of `server.py`. The viewer r
 ### HTTP (default in a terminal)
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9410, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9900, path="/mcp")
 ```
 
-Server listens at `http://127.0.0.1:9410/mcp`.
+Server listens at `http://127.0.0.1:9900/mcp`.
 
 ### stdio (default when launched by an MCP client)
 
@@ -167,7 +167,7 @@ The server picks stdio automatically when it is not started from an interactive 
 ### SSE
 
 ```python
-mcp.run(transport="sse", host="127.0.0.1", port=9410)
+mcp.run(transport="sse", host="127.0.0.1", port=9900)
 ```
 
 | Transport | When to use |
@@ -208,7 +208,7 @@ Restart your MCP client. The viewer starts together with the server and stops wh
 2. Point your client at:
 
     ```
-    http://127.0.0.1:9410/mcp
+    http://127.0.0.1:9900/mcp
     ```
 
 ---
@@ -218,19 +218,19 @@ Restart your MCP client. The viewer starts together with the server and stops wh
 Any MCP-compliant client can connect via HTTP:
 
 ```
-http://127.0.0.1:9410/mcp
+http://127.0.0.1:9900/mcp
 ```
 
 To use a different port, edit `server.py`:
 
 ```python
-mcp.run(transport="http", host="127.0.0.1", port=9412, path="/mcp")
+mcp.run(transport="http", host="127.0.0.1", port=9902, path="/mcp")
 ```
 
 To let other `subagent_mcp` agents write to the blog, register it there:
 
 ```
-SUBAGENT_MCP_SERVERS=blog=http://127.0.0.1:9410/mcp
+SUBAGENT_MCP_SERVERS=blog=http://127.0.0.1:9900/mcp
 ```
 
 Do not expose the MCP port to the public internet or an untrusted network.

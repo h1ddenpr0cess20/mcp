@@ -11,7 +11,7 @@ cp blog_mcp/.env.example blog_mcp/.env   # optional; the defaults work
 python blog_mcp/server.py
 ```
 
-The MCP server runs on HTTP transport at `127.0.0.1:9410` by default, and the blog viewer at `http://127.0.0.1:9411`.
+The MCP server runs on HTTP transport at `127.0.0.1:9900` by default, and the blog viewer at `http://127.0.0.1:9901`.
 
 On first start the server generates a viewer password and stores it in `~/mcp-blog/viewer_password`. Log in as `owner` with that password:
 
@@ -48,7 +48,7 @@ cat ~/mcp-blog/viewer_password
 
 What it does not do:
 
-- The MCP endpoint on port 9410 has no authentication, like the other servers in this repo. Anyone who can reach it can read and write every post. Keep it on `127.0.0.1`.
+- The MCP endpoint on port 9900 has no authentication, like the other servers in this repo. Anyone who can reach it can read and write every post. Keep it on `127.0.0.1`.
 - The database is not encrypted at rest. Use disk encryption if that matters to you.
 - Whatever MCP client you connect sees the posts it reads and writes. With a hosted model, that text goes to its provider. Pair this with a local model (for example through `subagent_mcp`) to keep posts entirely on your machine.
 - A post that embeds an `https://` image makes your browser fetch it from that host.
@@ -63,7 +63,7 @@ Copy `.env.example` to `.env` and edit as needed.
 | `BLOG_TITLE` | `Private Blog` | Blog name shown in the viewer |
 | `BLOG_DESCRIPTION` | *(empty)* | Tagline shown under the title |
 | `BLOG_HOST` | `127.0.0.1` | Viewer bind address |
-| `BLOG_PORT` | `9411` | Viewer port |
+| `BLOG_PORT` | `9901` | Viewer port |
 | `BLOG_USERNAME` | `owner` | Viewer login name |
 | `BLOG_PASSWORD` | *(generated)* | Viewer password; leave unset to generate one into `$BLOG_DIR/viewer_password` |
 | `BLOG_TLS_CERT` / `BLOG_TLS_KEY` | *(none)* | PEM certificate and key to serve the viewer over HTTPS |

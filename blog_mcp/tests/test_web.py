@@ -136,7 +136,7 @@ class TestPasswordConfiguration:
         for name in ("BLOG_HOST", "BLOG_PORT", "BLOG_USERNAME", "BLOG_TITLE"):
             monkeypatch.delenv(name, raising=False)
         server = BlogServer(blog, password="x")
-        assert (server.host, server.port, server.username, server.site["title"]) == ("127.0.0.1", 9411, "owner", "Private Blog")
+        assert (server.host, server.port, server.username, server.site["title"]) == ("127.0.0.1", 9901, "owner", "Private Blog")
 
     @pytest.mark.unit
     @pytest.mark.parametrize("username", ["", "a:b"])

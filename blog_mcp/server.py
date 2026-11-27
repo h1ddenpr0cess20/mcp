@@ -212,6 +212,6 @@ def get_blog_info() -> dict:
 
 if __name__ == "__main__":
     if sys.stdin.isatty():
-        mcp.run(transport="http", host="127.0.0.1", port=9410, path="/mcp")
+        mcp.run(transport="http", host="127.0.0.1", port=9900, path="/mcp")
     else:
         mcp.run()

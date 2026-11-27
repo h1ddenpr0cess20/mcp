@@ -131,7 +131,7 @@ delete_post("notes-on-sourdough")      # gone for good
 Posts are stored locally, but any hosted model you connect reads and writes them through its provider. To avoid that, register the blog with [`subagent_mcp`](../../subagent_mcp/README.md) and use a local model:
 
 ```
-SUBAGENT_MCP_SERVERS=blog=http://127.0.0.1:9410/mcp
+SUBAGENT_MCP_SERVERS=blog=http://127.0.0.1:9900/mcp
 ```
 
 ```
