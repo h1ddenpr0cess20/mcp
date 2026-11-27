@@ -68,7 +68,8 @@ class Browser:
         self.cookies: dict[str, str] = {}
 
     def request(self, method: str, path: str, *, headers: dict | None = None, body: bytes | None = None,
-                form: dict | None = None, json_body=None, files: dict | None = None) -> Response:
+                form: dict | None = None, json_body=None, files=None, fields: dict | None = None) -> Response:
+        """`files` is {field: (filename, bytes)} or a list of (field, filename, bytes); `fields` are extra text parts."""
         all_headers = dict(headers or {})
         if form is not None:
             body = urlencode(form).encode()
@@ -78,8 +79,10 @@ class Browser:
             all_headers.setdefault("Content-Type", "application/json")
         elif files is not None:
             boundary = uuid.uuid4().hex
-            parts = []
-            for field, (filename, content) in files.items():
+            parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+                     for name, value in (fields or {}).items()]
+            items = [(field, *value) for field, value in files.items()] if isinstance(files, dict) else list(files)
+            for field, filename, content in items:
                 parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
                              f"Content-Type: application/octet-stream\r\n\r\n".encode() + content + b"\r\n")
             body = b"".join(parts) + f"--{boundary}--\r\n".encode()

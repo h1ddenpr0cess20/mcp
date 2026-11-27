@@ -87,6 +87,10 @@ class BlogClient:
         try:
             data = response.json()
         except ValueError:
+            if response.status_code == 413:  # refused by the size limit before the blog could answer in JSON
+                raise BlogError(
+                    "The blog refused that upload as too large. Its limit is set by BLOG_MAX_ATTACHMENT_MB on the blog."
+                ) from None
             raise BlogError(f"Unexpected response from {self.base_url} (HTTP {response.status_code}). Is BLOG_URL the blog?") from None
         if response.status_code == 401:
             raise BlogError("The blog rejected the API token. Check BLOG_API_TOKEN against the blog's api_token.")
@@ -152,6 +156,33 @@ class BlogClient:
     def info(self) -> dict:
         """The blog's title, address, mode, and post counts."""
         return self._request("GET", "/api/v1/info")
+
+    # --- attachments -------------------------------------------------------
+
+    def list_attachments(self, slug: str) -> dict:
+        """The files attached to a post."""
+        return self._request("GET", f"/api/v1/posts/{self._slug(slug)}/attachments")
+
+    def add_attachment(self, slug: str, filename: str, data: bytes) -> dict:
+        """Attach a file made of `data` to a post. A file of the same name on that post is replaced."""
+        return self._request("POST", f"/api/v1/posts/{self._slug(slug)}/attachments", files={"file": (filename, data)})
+
+    def attach_file(self, slug: str, file_path: str, filename: str = "") -> dict:
+        """Attach a file from this computer to a post, under its own name unless `filename` is given."""
+        path = Path(os.path.expanduser(file_path))
+        if not path.is_file():
+            raise BlogError(f"No file at {file_path}")
+        with path.open("rb") as handle:
+            return self._request("POST", f"/api/v1/posts/{self._slug(slug)}/attachments", files={"file": (filename or path.name, handle)})
+
+    def read_attachment(self, attachment_id: str, max_bytes: int = 0) -> dict:
+        """An attachment's details and, for a text file, its content."""
+        params = {"max_bytes": max_bytes} if max_bytes > 0 else None
+        return self._request("GET", f"/api/v1/attachments/{self._slug(attachment_id)}", params=params)
+
+    def remove_attachment(self, slug: str, attachment_id: str) -> dict:
+        """Remove a file from a post."""
+        return self._request("DELETE", f"/api/v1/posts/{self._slug(slug)}/attachments/{self._slug(attachment_id)}")
 
     # --- images ------------------------------------------------------------
 

@@ -74,5 +74,11 @@ class TestMediaPath:
         assert media_path(tmp_path, name) is None
 
     @pytest.mark.unit
+    def test_a_trailing_newline_is_not_forgiven_even_if_such_a_file_exists(self, tmp_path):
+        name = "a" * 32 + ".png\n"
+        (tmp_path / name).write_bytes(PNG)
+        assert media_path(tmp_path, name) is None
+
+    @pytest.mark.unit
     def test_missing_file(self, tmp_path):
         assert media_path(tmp_path, "0" * 32 + ".png") is None

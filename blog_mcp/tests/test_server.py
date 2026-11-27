@@ -18,6 +18,7 @@ SERVER_PATH = Path(__file__).resolve().parent.parent / "server.py"
 EXPECTED_TOOLS = {
     "create_post", "get_post", "list_posts", "update_post", "replace_in_post", "publish_post", "unpublish_post",
     "delete_post", "search_posts", "list_tags", "upload_image", "get_blog_info",
+    "attach_text", "attach_file", "list_attachments", "read_attachment", "remove_attachment",
 }
 
 POST = {"slug": "hello", "title": "Hello", "status": "draft", "tags": [], "url": "http://blog.test/post/hello"}
@@ -272,3 +273,69 @@ class TestStartupWarning:
         load_server(monkeypatch, tmp_path, url=url)
         sys.modules.pop("blog_mcp_server_under_test", None)
         assert "WARNING" not in capsys.readouterr().err
+
+
+class TestAttachmentTools:
+    ATTACHED = {"id": "c" * 32, "filename": "analysis.py", "size": 12, "content_type": "text/x-python", "is_text": True,
+                "replaced": False, "url": "http://blog.test/files/" + "c" * 32}
+
+    @pytest.mark.integration
+    def test_attach_text_sends_the_text_as_a_utf8_file_and_returns_a_link(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(201, dict(self.ATTACHED))
+        result = ok(srv, "attach_text", slug="my-post", filename="analysis.py", content="print('héllo 日本語')\n")
+        assert (blog.session.last["method"], blog.session.last["url"]) == ("POST", "http://blog.test/api/v1/posts/my-post/attachments")
+        assert blog.session.last["files"] == {"file": ("analysis.py", "print('héllo 日本語')\n".encode())}
+        assert result["markdown"] == f"[analysis.py](/files/{'c' * 32})" and result["url"].endswith("c" * 32)
+
+    @pytest.mark.integration
+    def test_the_markdown_link_cannot_be_broken_by_the_file_name(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(201, {**self.ATTACHED, "filename": "a](http://evil.example)[b.txt"})
+        result = ok(srv, "attach_text", slug="p", filename="whatever", content="x")
+        assert result["markdown"] == f"[a(http://evil.example)b.txt](/files/{'c' * 32})"
+
+    @pytest.mark.integration
+    def test_attach_text_with_empty_content_attaches_an_empty_file(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(201, {**self.ATTACHED, "size": 0})
+        ok(srv, "attach_text", slug="p", filename="__init__.py", content="")
+        assert blog.session.last["files"]["file"] == ("__init__.py", b"")
+
+    @pytest.mark.integration
+    def test_attach_file(self, srv, blog, tmp_path):
+        local = tmp_path / "data.csv"
+        local.write_bytes(b"a,b\n")
+        blog.reply = lambda m, u, k: make_response(201, {**self.ATTACHED, "filename": "data.csv"})
+        result = ok(srv, "attach_file", slug="p", file_path=str(local), filename="renamed.csv")
+        assert blog.session.last["files"]["file"][0] == "renamed.csv" and result["markdown"].startswith("[data.csv](")
+
+    @pytest.mark.integration
+    def test_attach_file_missing(self, srv, blog):
+        assert "No file at /nope.bin" in failure(srv, "attach_file", slug="p", file_path="/nope.bin")
+
+    @pytest.mark.integration
+    def test_list_read_and_remove(self, srv, blog):
+        blog.reply = lambda m, u, k: make_response(200, {"attachments": [self.ATTACHED], "count": 1})
+        assert ok(srv, "list_attachments", slug="p")["count"] == 1
+        blog.reply = lambda m, u, k: make_response(200, {**self.ATTACHED, "content": "print(1)", "truncated": False, "post_slug": "p"})
+        read = ok(srv, "read_attachment", attachment_id="c" * 32, max_bytes=100)
+        assert read["content"] == "print(1)" and blog.session.last["params"] == {"max_bytes": 100}
+        blog.reply = lambda m, u, k: make_response(200, {"slug": "p", "id": "c" * 32, "deleted": True})
+        assert ok(srv, "remove_attachment", slug="p", attachment_id="c" * 32)["deleted"] is True
+        assert blog.session.last["method"] == "DELETE"
+
+    @pytest.mark.integration
+    def test_read_attachment_defaults_to_the_blogs_own_limit(self, srv, blog):
+        ok(srv, "read_attachment", attachment_id="c" * 32)
+        assert blog.session.last["params"] is None
+
+    @pytest.mark.integration
+    @pytest.mark.parametrize("status,error,tool,arguments", [
+        (404, "Post 'ghost' not found", "attach_text", {"slug": "ghost", "filename": "a.txt", "content": "x"}),
+        (400, "A post can have at most 50 attachments", "attach_text", {"slug": "p", "filename": "a.txt", "content": "x"}),
+        (413, "Files can be at most 25 MB", "attach_text", {"slug": "p", "filename": "a.txt", "content": "x"}),
+        (404, "Attachment not found", "read_attachment", {"attachment_id": "0" * 32}),
+        (404, "That file is not attached to this post", "remove_attachment", {"slug": "p", "attachment_id": "0" * 32}),
+    ])
+    def test_the_blogs_messages_reach_the_model(self, srv, blog, status, error, tool, arguments):
+        blog.reply = lambda m, u, k: make_response(status, {"error": error})
+        text = failure(srv, tool, **arguments)
+        assert error in text and "Traceback" not in text

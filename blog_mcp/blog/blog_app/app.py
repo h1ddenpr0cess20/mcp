@@ -5,6 +5,7 @@ server (blog.py uses uvicorn). It stands alone: nothing else needs to run.
 """
 
 import asyncio
+import hashlib
 from dataclasses import replace
 from math import ceil
 from pathlib import Path
@@ -19,15 +20,18 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainT
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import media, pages, passwords
+from . import discovery, media, pages, passwords
+from .attachments import AttachmentFiles, clean_filename, guess_content_type
 from .auth import SESSION_COOKIE, SESSION_SECONDS, Auth, LoginThrottle
 from .config import Settings, load_or_create_secret
 from .render import render_markdown
-from .store import MAX_BODY_CHARS, BlogError, BlogStore, Conflict, NotFound
+from .store import MAX_BODY_CHARS, BlogError, BlogStore, Conflict, NotFound, TooLarge
 
 PAGE_SIZE = 10
 ADMIN_PAGE_SIZE = 25
-MAX_REQUEST_BYTES = media.MAX_IMAGE_BYTES + 1024 * 1024  # an image plus form overhead; nothing larger is ever read
+FORM_REQUEST_BYTES = 6 * 1024 * 1024  # a 1,000,000-character post is at most 4 MB of UTF-8, plus form overhead
+IMAGE_REQUEST_BYTES = media.MAX_IMAGE_BYTES + 1024 * 1024
+MAX_PREVIEW_API_BYTES = 1024 * 1024
 STATIC_DIR = Path(__file__).parent / "static"
 
 CONTENT_SECURITY_POLICY = (
@@ -47,6 +51,8 @@ NOTICES = {
     "published": "Published.",
     "unpublished": "Moved back to drafts.",
     "deleted": "Post deleted.",
+    "attached": "File attached.",
+    "detached": "File removed from the post.",
 }
 
 
@@ -77,18 +83,23 @@ class SecurityHeaders:
 
 
 class BodyLimit:
-    """Rejects any request body over `max_bytes`, whether or not it declares a length."""
+    """Rejects any request body over the limit for its path, whether or not it declares a length.
 
-    def __init__(self, app, max_bytes: int):
+    `limit_for(path)` returns the largest body (in bytes) a path accepts, so ordinary pages stay small
+    while the routes that take file uploads allow a file.
+    """
+
+    def __init__(self, app, limit_for):
         self.app = app
-        self.max_bytes = max_bytes
+        self.limit_for = limit_for
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        limit = self.limit_for(scope["path"])
         declared = dict(scope["headers"]).get(b"content-length")
-        if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):
+        if declared is not None and (not declared.isdigit() or int(declared) > limit):
             await PlainTextResponse("Request body too large", status_code=413)(scope, receive, send)
             return
         received = 0
@@ -98,7 +109,7 @@ class BodyLimit:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes:
+                if received > limit:
                     raise HTTPException(status_code=413, detail="Request body too large")
             return message
 
@@ -147,6 +158,7 @@ class BlogApp:
         self.auth = Auth(settings.username, self.password_hash, secret_key, self.api_token)
         self.throttle = LoginThrottle()
         self.media_dir = data_dir / "media"
+        self.attachments = AttachmentFiles(data_dir / "attachments", settings.max_attachment_bytes)
         self.site = {"title": settings.title, "description": settings.description}
 
     def _resolve_password(self, settings: Settings, secret_key: str) -> tuple[str, str]:
@@ -183,6 +195,8 @@ class BlogApp:
             "user": session["u"] if session else None,
             "csrf": session["csrf"] if session else None,
             "indexable": self.settings.public,
+            "public": self.settings.public,
+            "base": self.public_base(request),
         }
 
     def not_found(self, request: Request, message: str = "That page does not exist.") -> HTMLResponse:
@@ -200,10 +214,14 @@ class BlogApp:
         """The logged-in session, or the response that sends the visitor to log in."""
         session = self.session(request)
         if session is None:
-            if request.url.path in ("/admin/preview", "/admin/upload"):
+            if request.url.path in ("/admin/preview", "/admin/upload") or self.wants_json(request):
                 return JSONResponse({"error": "You are logged out. Reload the page and log in again."}, status_code=401)
             return self.to_login(request)
         return session
+
+    @staticmethod
+    def wants_json(request: Request) -> bool:
+        return "application/json" in request.headers.get("accept", "")
 
     def csrf_failed(self, request: Request) -> HTMLResponse:
         return HTMLResponse(pages.message_page(self.ctx(request), "Session expired",
@@ -214,24 +232,44 @@ class BlogApp:
 
     # --- reading pages -----------------------------------------------------
 
+    def login_or_401(self, request: Request) -> Response:
+        """Send a person to the login page, but tell an agent asking for Markdown plainly that the blog is private."""
+        return self.machine_gate(request) if self.wants_markdown(request) else self.to_login(request)
+
     async def home(self, request: Request) -> Response:
         if not self.can_read(request):
-            return self.to_login(request)
+            return self.login_or_401(request)
+        if self.wants_markdown(request):
+            return await self.llms_txt(request)
         page = _page_number(request)
         listing = self.store.list_posts(status="published", limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE)
+        head = discovery.home_head(self.site, self.public_base(request)) if self.settings.public else ""
         return HTMLResponse(pages.post_list(self.ctx(request), "Posts", listing, "/", page, PAGE_SIZE,
-                                                  "No posts have been published yet."))
+                                            "No posts have been published yet.", head=head), headers={"Vary": "Accept"})
 
     async def post(self, request: Request) -> Response:
+        slug = request.path_params["slug"]
+        as_markdown = slug.endswith(".md") or self.wants_markdown(request)  # slugs never contain a dot
+        slug = slug.removesuffix(".md")
         if not self.can_read(request):
-            return self.to_login(request)
+            return self.machine_gate(request) if as_markdown else self.to_login(request)
         try:
-            post = self.store.get_post(request.path_params["slug"])
+            post = self.store.get_post(slug)
         except NotFound:
+            post = None
+        if post is None or (post["status"] == "draft" and self.session(request) is None):
+            if as_markdown:
+                return PlainTextResponse("There is no post with that address.\n", status_code=404)
             return self.not_found(request, "There is no post with that address.")
-        if post["status"] == "draft" and self.session(request) is None:
-            return self.not_found(request, "There is no post with that address.")
-        return HTMLResponse(pages.post_page(self.ctx(request), post, render_markdown(post["body"])))
+        base = self.public_base(request)
+        if as_markdown:
+            return self.machine_response(request, discovery.post_markdown(post, base), "text/markdown; charset=utf-8", vary_accept=True)
+        public = self.settings.public and post["status"] == "published"
+        headers = {"Vary": "Accept"}
+        if public:
+            headers["Link"] = f'<{discovery.post_url(base, post["slug"])}.md>; rel="alternate"; type="text/markdown"'
+        head = discovery.post_head(post, self.site, base) if public else ""
+        return HTMLResponse(pages.post_page(self.ctx(request), post, render_markdown(post["body"]), head=head), headers=headers)
 
     async def tag(self, request: Request) -> Response:
         if not self.can_read(request):
@@ -249,13 +287,16 @@ class BlogApp:
 
     async def search(self, request: Request) -> Response:
         if not self.can_read(request):
-            return self.to_login(request)
+            return self.login_or_401(request)
         text = request.query_params.get("q", "").strip()[:200]
         if not text:
             return HTMLResponse(pages.search_page(self.ctx(request), "", None))
         status = "all" if self.session(request) else "published"
         found = self.store.search_posts(text, status=status, limit=50)["posts"]
-        return HTMLResponse(pages.search_page(self.ctx(request), text, found))
+        if self.wants_markdown(request):
+            return self.machine_response(request, discovery.search_markdown(text, found, self.public_base(request)),
+                                         "text/markdown; charset=utf-8", vary_accept=True)
+        return HTMLResponse(pages.search_page(self.ctx(request), text, found), headers={"Vary": "Accept"})
 
     async def media_file(self, request: Request) -> Response:
         path = media.media_path(self.media_dir, request.path_params["name"]) if self.can_read(request) else None
@@ -271,8 +312,212 @@ class BlogApp:
 
     async def robots(self, request: Request) -> Response:
         if self.settings.public:
-            return PlainTextResponse("User-agent: *\nDisallow: /admin\nDisallow: /login\nDisallow: /api\n")
+            base = self.public_base(request)
+            return PlainTextResponse(
+                "# This blog is public. Readers, search engines, and AI agents are welcome.\n"
+                "# For agents: /llms.txt is an index, /llms-full.txt is every post, and any post is plain Markdown at /post/<slug>.md\n"
+                "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /login\nDisallow: /api\n"
+                f"Sitemap: {base}/sitemap.xml\n"
+            )
         return PlainTextResponse("User-agent: *\nDisallow: /\n")
+
+    # --- attachments -------------------------------------------------------
+
+    async def attach(self, slug: str, upload) -> dict:
+        """Attach an uploaded file to a post, replacing a file of the same name. Returns the attachment's record."""
+        filename = clean_filename(getattr(upload, "filename", "") or "")
+        planned_id = self.store.plan_attachment(slug, filename)  # fails early for an unknown post or a full one
+        received = await self.attachments.receive(upload)
+        try:
+            record = self.store.save_attachment(slug, planned_id, filename, guess_content_type(filename), received.size,
+                                                received.sha256, received.is_text)
+            self.attachments.commit(received, record["id"])
+        except BaseException:
+            self.attachments.discard(received)
+            raise
+        return record
+
+    def remove_attachment(self, slug: str, attachment_id: str) -> bool:
+        removed = self.store.delete_attachment(slug, attachment_id)
+        if removed:
+            self.attachments.remove(attachment_id)
+        return removed
+
+    def delete_post(self, slug: str) -> bool:
+        """Delete a post and the files attached to it."""
+        try:
+            attachment_ids = [a["id"] for a in self.store.list_attachments(slug)]
+        except NotFound:
+            return False
+        deleted = self.store.delete_post(slug)
+        if deleted:
+            for attachment_id in attachment_ids:
+                self.attachments.remove(attachment_id)
+        return deleted
+
+    def visible_attachment(self, request: Request, attachment_id: str) -> dict | None:
+        """An attachment, if this visitor may see it: it follows the post. Drafts are for the owner only."""
+        try:
+            record = self.store.get_attachment(attachment_id)
+        except NotFound:
+            return None
+        if self.session(request) is not None:
+            return record
+        return record if record["post_status"] == "published" and self.settings.public else None
+
+    def attachment_unavailable(self, request: Request) -> Response:
+        """The same answer for 'does not exist' and 'not yours to see', so ids cannot be probed."""
+        if self.session(request) is None and not self.settings.public:
+            return self.to_login(request)
+        return self.not_found(request, "There is no file with that address.")
+
+    def download_response(self, record: dict) -> Response | None:
+        """The file as a download. Never served inline, and never as a type a browser would run or render."""
+        path = self.attachments.path(record["id"])
+        if not path.is_file():
+            return None
+        return FileResponse(path, media_type="application/octet-stream", filename=record["filename"],
+                            content_disposition_type="attachment",
+                            headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
+
+    async def file_download(self, request: Request) -> Response:
+        record = self.visible_attachment(request, request.path_params["id"])
+        response = self.download_response(record) if record else None
+        return response or self.attachment_unavailable(request)
+
+    async def file_view(self, request: Request) -> Response:
+        record = self.visible_attachment(request, request.path_params["id"])
+        if record is None or not self.attachments.path(record["id"]).is_file():
+            return self.attachment_unavailable(request)
+        text, truncated = self.attachments.read_text(record["id"]) if record["is_text"] else (None, False)
+        return HTMLResponse(pages.attachment_page(self.ctx(request), record, text, truncated))
+
+    async def admin_attach(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        wants_json = self.wants_json(request)
+        form = await request.form(max_files=10, max_fields=4)
+        if not Auth.check_csrf(session, _field(form, "csrf") or request.headers.get("x-csrf-token")):
+            return JSONResponse({"error": "Invalid CSRF token"}, status_code=403) if wants_json else self.csrf_failed(request)
+        slug = request.path_params["slug"]
+        saved, error, failure_status = [], "", 400
+        try:
+            uploads = [upload for upload in form.getlist("file") if not isinstance(upload, str)]
+            if not uploads:
+                raise BlogError("Choose a file to attach")
+            for upload in uploads:
+                saved.append((await self.attach(slug, upload))["filename"])
+        except NotFound:
+            return JSONResponse({"error": "That post no longer exists"}, status_code=404) if wants_json else self.not_found(request)
+        except TooLarge as exc:
+            error, failure_status = str(exc), 413
+        except BlogError as exc:
+            error = str(exc)
+        if wants_json:
+            files = pages.attachment_editor_items(self.ctx(request), slug, self.store.list_attachments(slug))
+            return JSONResponse({"saved": saved, "error": error, "html": files}, status_code=failure_status if error and not saved else 200)
+        if error:
+            return self.edit_page(request, slug, error=error, status=failure_status)
+        return RedirectResponse(f"/admin/edit/{quote(slug, safe='')}?msg=attached", status_code=303)
+
+    async def admin_detach(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        form = await request.form()
+        if not Auth.check_csrf(session, _field(form, "csrf")):
+            return self.csrf_failed(request)
+        slug = request.path_params["slug"]
+        if not self.remove_attachment(slug, request.path_params["id"]):
+            return self.not_found(request, "That file is not attached to this post.")
+        return RedirectResponse(f"/admin/edit/{quote(slug, safe='')}?msg=detached", status_code=303)
+
+    # --- for agents and feed readers ---------------------------------------
+
+    @staticmethod
+    def wants_markdown(request: Request) -> bool:
+        """True when the client prefers Markdown to HTML, as an agent sending `Accept: text/markdown` does."""
+        accept = request.headers.get("accept", "")
+        markdown, html = accept.find("text/markdown"), accept.find("text/html")
+        return markdown != -1 and (html == -1 or markdown < html)
+
+    def machine_gate(self, request: Request) -> Response | None:
+        """None if the visitor may read, otherwise a plain 401: an agent cannot use a login page."""
+        if self.can_read(request):
+            return None
+        return PlainTextResponse("This blog is private. Log in at /login to read it.\n", status_code=401)
+
+    def machine_response(self, request: Request, body: str, media_type: str, vary_accept: bool = False) -> Response:
+        """A text response for machines. Anonymous reads of a public blog may be cached for five minutes and revalidated."""
+        headers = {"ETag": '"' + hashlib.sha256(body.encode("utf-8")).hexdigest()[:32] + '"'}
+        if vary_accept:
+            headers["Vary"] = "Accept"
+        if self.settings.public and self.session(request) is None:
+            headers["Cache-Control"] = "public, max-age=300"
+            if request.headers.get("if-none-match") == headers["ETag"]:
+                return Response(status_code=304, headers=headers)
+        return Response(body, media_type=media_type, headers=headers)
+
+    def published_posts(self, limit: int = discovery.MAX_LISTED) -> list[dict]:
+        """Summaries of published posts, newest first."""
+        posts: list[dict] = []
+        while len(posts) < limit:
+            batch = self.store.list_posts(status="published", limit=100, offset=len(posts))["posts"]
+            if not batch:
+                break
+            posts += batch
+        return posts[:limit]
+
+    def full_posts(self, summaries: list[dict]):
+        """Complete posts (with body and attachments) for the given summaries, one at a time."""
+        for summary in summaries:
+            try:
+                yield self.store.get_post(summary["slug"])
+            except NotFound:
+                continue  # deleted while this was being built
+
+    async def llms_txt(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        text = discovery.llms_txt(self.site, self.published_posts(), self.public_base(request))
+        return self.machine_response(request, text, "text/plain; charset=utf-8", vary_accept=True)
+
+    async def llms_full(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        text = discovery.llms_full_txt(self.site, self.full_posts(self.published_posts()), self.public_base(request))
+        return self.machine_response(request, text, "text/plain; charset=utf-8")
+
+    async def sitemap(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        return self.machine_response(request, discovery.sitemap_xml(self.published_posts(), self.public_base(request)),
+                                     "application/xml; charset=utf-8")
+
+    async def atom_feed(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        posts = list(self.full_posts(self.published_posts(discovery.FEED_ITEMS)))
+        return self.machine_response(request, discovery.atom_feed(self.site, posts, self.public_base(request), render_markdown),
+                                     "application/atom+xml; charset=utf-8")
+
+    async def json_feed(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        posts = list(self.full_posts(self.published_posts(discovery.FEED_ITEMS)))
+        return self.machine_response(request, discovery.json_feed(self.site, posts, self.public_base(request), render_markdown),
+                                     "application/feed+json; charset=utf-8")
+
+    async def file_raw(self, request: Request) -> Response:
+        """A text attachment as plain text, so an agent (or a person) can read the code as it is."""
+        record = self.visible_attachment(request, request.path_params["id"])
+        if record is None or not self.attachments.path(record["id"]).is_file():
+            return self.attachment_unavailable(request)
+        if not record["is_text"]:
+            return self.not_found(request, "This file is not text. Download it instead.")
+        return FileResponse(self.attachments.path(record["id"]), media_type="text/plain; charset=utf-8",
+                            headers={"Content-Disposition": "inline", "Content-Security-Policy": "default-src 'none'; sandbox"})
 
     # --- login / logout ----------------------------------------------------
 
@@ -368,14 +613,17 @@ class BlogApp:
         session = self.admin_session(request)
         if isinstance(session, Response):
             return session
+        return self.edit_page(request, request.path_params["slug"], notice=NOTICES.get(request.query_params.get("msg", ""), ""))
+
+    def edit_page(self, request: Request, slug: str, notice: str = "", error: str = "", status: int = 200) -> Response:
+        """The editor for an existing post, filled in from what is saved."""
         try:
-            post = self.store.get_post(request.path_params["slug"])
+            post = self.store.get_post(slug)
         except NotFound:
             return self.not_found(request, "There is no post with that address.")
         values = {"title": post["title"], "slug": post["slug"], "tags": ", ".join(post["tags"]),
                   "summary": post["custom_summary"], "body": post["body"]}
-        notice = NOTICES.get(request.query_params.get("msg", ""), "")
-        return HTMLResponse(pages.editor_page(self.ctx(request), post, values, notice=notice))
+        return HTMLResponse(pages.editor_page(self.ctx(request), post, values, error=error, notice=notice), status_code=status)
 
     async def edit(self, request: Request) -> Response:
         session = self.admin_session(request)
@@ -425,7 +673,7 @@ class BlogApp:
         slug = request.path_params["slug"]
         try:
             if action == "delete":
-                if not self.store.delete_post(slug):
+                if not self.delete_post(slug):
                     raise NotFound(slug)
                 notice = "deleted"
             else:
@@ -491,6 +739,8 @@ def _api(handler):
             return _api_error(str(exc), 404)
         except Conflict as exc:
             return _api_error(str(exc), 409)
+        except TooLarge as exc:
+            return _api_error(str(exc), 413)
         except BlogError as exc:
             return _api_error(str(exc), 400)
 
@@ -553,13 +803,28 @@ class _Api:
 
     def with_url(self, request: Request, post: dict) -> dict:
         post["url"] = f"{self.blog.public_base(request)}/post/{quote(post['slug'], safe='')}"
+        if "attachments" in post:  # only full posts carry the list; summaries carry attachment_count
+            post["attachments"] = [self.with_attachment_url(request, a) for a in post["attachments"]]
         return post
+
+    def with_attachment_url(self, request: Request, attachment: dict) -> dict:
+        base = f"{self.blog.public_base(request)}/files/{attachment['id']}"
+        attachment["url"] = base
+        if attachment.get("is_text"):
+            attachment["view_url"] = f"{base}/view"
+        return attachment
 
     @_api
     async def info(self, request: Request) -> Response:
         s = self.blog.settings
-        return JSONResponse({"title": s.title, "description": s.description, "public": s.public,
-                             "url": self.blog.public_base(request), "posts": self.store.stats()})
+        base = self.blog.public_base(request)
+        info = {"title": s.title, "description": s.description, "public": s.public, "url": base, "posts": self.store.stats()}
+        if s.public:  # these only work when anyone can read the blog
+            info["agent_urls"] = {
+                "llms_txt": f"{base}/llms.txt", "llms_full_txt": f"{base}/llms-full.txt", "atom_feed": f"{base}/feed.xml",
+                "json_feed": f"{base}/feed.json", "sitemap": f"{base}/sitemap.xml", "post_markdown": f"{base}/post/<slug>.md",
+            }
+        return JSONResponse(info)
 
     @_api
     async def list_posts(self, request: Request) -> Response:
@@ -608,7 +873,7 @@ class _Api:
     @_api
     async def delete_post(self, request: Request) -> Response:
         slug = request.path_params["slug"]
-        if not self.store.delete_post(slug):
+        if not self.blog.delete_post(slug):
             raise NotFound(f"Post '{slug}' not found")
         return JSONResponse({"slug": slug, "deleted": True})
 
@@ -626,6 +891,58 @@ class _Api:
     @_api
     async def upload_media(self, request: Request) -> Response:
         return await self.blog._save_upload(request)
+
+    @_api
+    async def list_attachments(self, request: Request) -> Response:
+        files = [self.with_attachment_url(request, a) for a in self.store.list_attachments(request.path_params["slug"])]
+        return JSONResponse({"attachments": files, "count": len(files)})
+
+    @_api
+    async def add_attachment(self, request: Request) -> Response:
+        form = await request.form(max_files=1, max_fields=4)
+        upload = form.get("file")
+        if upload is None or isinstance(upload, str):
+            raise BlogError("Send the file in a form field named 'file'")
+        record = await self.blog.attach(request.path_params["slug"], upload)
+        return JSONResponse(self.with_attachment_url(request, record), status_code=200 if record["replaced"] else 201)
+
+    @_api
+    async def get_attachment(self, request: Request) -> Response:
+        """The attachment's details and, for a text file, its content (so an assistant can read it)."""
+        record = self.store.get_attachment(request.path_params["id"])
+        limit = max(1, min(_int(request, "max_bytes", 256 * 1024), MAX_PREVIEW_API_BYTES))
+        content, truncated = self.blog.attachments.read_text(record["id"], limit) if record["is_text"] else (None, False)
+        return JSONResponse({**self.with_attachment_url(request, record), "content": content, "truncated": truncated})
+
+    @_api
+    async def download_attachment(self, request: Request) -> Response:
+        record = self.store.get_attachment(request.path_params["id"])
+        response = self.blog.download_response(record)
+        if response is None:
+            raise NotFound("Attachment not found")
+        return response
+
+    @_api
+    async def remove_attachment(self, request: Request) -> Response:
+        slug, attachment_id = request.path_params["slug"], request.path_params["id"]
+        self.store.list_attachments(slug)  # a clear 'post not found' for an unknown post
+        if not self.blog.remove_attachment(slug, attachment_id):
+            raise NotFound("That file is not attached to this post")
+        return JSONResponse({"slug": slug, "id": attachment_id, "deleted": True})
+
+
+def request_limit_for(settings: Settings):
+    """How large a request body each path accepts: file uploads get room for a file, everything else stays small."""
+    attachment_limit = settings.max_attachment_bytes + 1024 * 1024  # one file plus form overhead
+
+    def limit(path: str) -> int:
+        if path.startswith("/admin/attach/") or (path.startswith("/api/v1/posts/") and path.endswith("/attachments")):
+            return attachment_limit
+        if path in ("/admin/upload", "/api/v1/media"):
+            return IMAGE_REQUEST_BYTES
+        return FORM_REQUEST_BYTES
+
+    return limit
 
 
 def create_app(settings: Settings) -> Starlette:
@@ -653,6 +970,14 @@ def create_app(settings: Settings) -> Starlette:
         Route("/tags", blog.tags),
         Route("/search", blog.search),
         Route("/media/{name}", blog.media_file),
+        Route("/files/{id}", blog.file_download),
+        Route("/files/{id}/view", blog.file_view),
+        Route("/files/{id}/raw", blog.file_raw),
+        Route("/llms.txt", blog.llms_txt),
+        Route("/llms-full.txt", blog.llms_full),
+        Route("/sitemap.xml", blog.sitemap),
+        Route("/feed.xml", blog.atom_feed),
+        Route("/feed.json", blog.json_feed),
         Route("/healthz", blog.healthz),
         Route("/robots.txt", blog.robots),
         Route("/login", blog.login_form, methods=["GET"]),
@@ -668,6 +993,8 @@ def create_app(settings: Settings) -> Starlette:
         Route("/admin/unpublish/{slug}", blog.unpublish, methods=["POST"]),
         Route("/admin/preview", blog.preview, methods=["POST"]),
         Route("/admin/upload", blog.upload, methods=["POST"]),
+        Route("/admin/attach/{slug}", blog.admin_attach, methods=["POST"]),
+        Route("/admin/detach/{slug}/{id}", blog.admin_detach, methods=["POST"]),
         Route("/api/v1/info", api.info, methods=["GET"]),
         Route("/api/v1/posts", api.list_posts, methods=["GET"]),
         Route("/api/v1/posts", api.create_post, methods=["POST"]),
@@ -680,11 +1007,16 @@ def create_app(settings: Settings) -> Starlette:
         Route("/api/v1/search", api.search, methods=["GET"]),
         Route("/api/v1/tags", api.tags, methods=["GET"]),
         Route("/api/v1/media", api.upload_media, methods=["POST"]),
+        Route("/api/v1/posts/{slug}/attachments", api.list_attachments, methods=["GET"]),
+        Route("/api/v1/posts/{slug}/attachments", api.add_attachment, methods=["POST"]),
+        Route("/api/v1/posts/{slug}/attachments/{id}", api.remove_attachment, methods=["DELETE"]),
+        Route("/api/v1/attachments/{id}", api.get_attachment, methods=["GET"]),
+        Route("/api/v1/attachments/{id}/download", api.download_attachment, methods=["GET"]),
         Mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static"),
     ]
     app = Starlette(
         routes=routes,
-        middleware=[Middleware(SecurityHeaders, indexable=settings.public), Middleware(BodyLimit, max_bytes=MAX_REQUEST_BYTES)],
+        middleware=[Middleware(SecurityHeaders, indexable=settings.public), Middleware(BodyLimit, limit_for=request_limit_for(settings))],
         exception_handlers={HTTPException: http_error, Exception: server_error},
     )
     app.state.blog = blog

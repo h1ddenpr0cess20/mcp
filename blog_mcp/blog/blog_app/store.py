@@ -2,6 +2,7 @@
 
 import os
 import re
+import secrets
 import sqlite3
 import unicodedata
 from contextlib import contextmanager
@@ -17,6 +18,7 @@ MAX_TAGS = 20
 MAX_TAG_CHARS = 50
 MAX_SLUG_CHARS = 100
 MAX_SEARCH_TERMS = 8
+MAX_ATTACHMENTS_PER_POST = 50
 MAX_OFFSET = 10**9  # far beyond any real blog; keeps OFFSET inside SQLite's integer range
 
 STATUSES = ("draft", "published")
@@ -45,6 +47,18 @@ CREATE TABLE IF NOT EXISTS post_tags (
     tag     TEXT NOT NULL,
     PRIMARY KEY (post_id, tag)
 );
+CREATE TABLE IF NOT EXISTS attachments (
+    id           TEXT PRIMARY KEY,
+    post_id      INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    filename     TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size         INTEGER NOT NULL,
+    sha256       TEXT NOT NULL,
+    is_text      INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    UNIQUE (post_id, filename)
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_post ON attachments(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_tags_tag ON post_tags(tag);
 CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
 """
@@ -59,6 +73,10 @@ class BlogError(ValueError):
 
 class NotFound(BlogError):
     """The post does not exist."""
+
+
+class TooLarge(BlogError):
+    """An upload is bigger than the blog accepts."""
 
 
 class Conflict(BlogError):
@@ -160,7 +178,7 @@ class BlogStore:
         return tags
 
     @staticmethod
-    def _to_dict(row, tags: list[str], with_body: bool = False) -> dict:
+    def _to_dict(row, tags: list[str], with_body: bool = False, attachment_count: int = 0) -> dict:
         post = {
             "slug": row["slug"],
             "title": row["title"],
@@ -172,6 +190,7 @@ class BlogStore:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "published_at": row["published_at"],
+            "attachment_count": attachment_count,
         }
         if with_body:
             post["body"] = row["body"]
@@ -187,7 +206,28 @@ class BlogStore:
 
     def _full(self, conn, slug: str) -> dict:
         row = self._require(conn, slug)
-        return self._to_dict(row, self._tags_for(conn, [row["id"]])[row["id"]], with_body=True)
+        attachments = self._attachments_for(conn, row["id"])
+        post = self._to_dict(row, self._tags_for(conn, [row["id"]])[row["id"]], with_body=True, attachment_count=len(attachments))
+        post["attachments"] = attachments
+        return post
+
+    @staticmethod
+    def _attachment_dict(row) -> dict:
+        return {"id": row["id"], "filename": row["filename"], "content_type": row["content_type"], "size": row["size"],
+                "sha256": row["sha256"], "is_text": bool(row["is_text"]), "created_at": row["created_at"]}
+
+    def _attachments_for(self, conn, post_id: int) -> list[dict]:
+        rows = conn.execute("SELECT * FROM attachments WHERE post_id = ? ORDER BY lower(filename), filename", (post_id,))
+        return [self._attachment_dict(row) for row in rows]
+
+    @staticmethod
+    def _attachment_counts(conn, post_ids: list[int]) -> dict[int, int]:
+        counts = {post_id: 0 for post_id in post_ids}
+        if post_ids:
+            marks = ",".join("?" * len(post_ids))
+            for row in conn.execute(f"SELECT post_id, COUNT(*) FROM attachments WHERE post_id IN ({marks}) GROUP BY post_id", post_ids):
+                counts[row[0]] = row[1]
+        return counts
 
     @staticmethod
     def _slug_taken(conn, slug: str, exclude_id: int | None = None) -> bool:
@@ -299,8 +339,9 @@ class BlogStore:
             total = conn.execute(f"SELECT COUNT(*) FROM posts p{clause}", params).fetchone()[0]
             rows = conn.execute(f"SELECT p.* FROM posts p{clause} ORDER BY {_ORDER} LIMIT ? OFFSET ?",
                                 params + [limit, offset]).fetchall()
-            tags = self._tags_for(conn, [row["id"] for row in rows])
-            posts = [self._to_dict(row, tags[row["id"]]) for row in rows]
+            ids = [row["id"] for row in rows]
+            tags, counts = self._tags_for(conn, ids), self._attachment_counts(conn, ids)
+            posts = [self._to_dict(row, tags[row["id"]], attachment_count=counts[row["id"]]) for row in rows]
         return {"posts": posts, "total": total, "limit": limit, "offset": offset}
 
     def update_post(self, slug: str, *, title: str | None = None, body: str | None = None, summary: str | None = None,
@@ -368,6 +409,64 @@ class BlogStore:
         with self._db() as conn:
             return conn.execute("DELETE FROM posts WHERE slug = ?", (slug,)).rowcount > 0
 
+    # --- attachments (the files themselves live on disk; see attachments.py) ---------------
+
+    def plan_attachment(self, slug: str, filename: str) -> str:
+        """Pick the id for a file about to be attached: the existing one if that name is already attached
+        (the file is then replaced in place, so links to it keep working), otherwise a new random one.
+        Raises NotFound for an unknown post and BlogError if the post already has the maximum number of files."""
+        with self._db() as conn:
+            row = self._require(conn, slug)
+            existing = conn.execute("SELECT id FROM attachments WHERE post_id = ? AND filename = ?", (row["id"], filename)).fetchone()
+            if existing is not None:
+                return existing["id"]
+            if conn.execute("SELECT COUNT(*) FROM attachments WHERE post_id = ?", (row["id"],)).fetchone()[0] >= MAX_ATTACHMENTS_PER_POST:
+                raise BlogError(f"A post can have at most {MAX_ATTACHMENTS_PER_POST} attachments")
+            return secrets.token_hex(16)
+
+    def save_attachment(self, slug: str, attachment_id: str, filename: str, content_type: str, size: int, sha256: str,
+                        is_text: bool) -> dict:
+        """Record an attachment, replacing the record of a file with the same name. `replaced` says which happened."""
+        with self._db() as conn:
+            row = self._require(conn, slug)
+            existing = conn.execute("SELECT id FROM attachments WHERE post_id = ? AND filename = ?", (row["id"], filename)).fetchone()
+            now = _now()
+            if existing is None:
+                attached = conn.execute("SELECT COUNT(*) FROM attachments WHERE post_id = ?", (row["id"],)).fetchone()[0]
+                if attached >= MAX_ATTACHMENTS_PER_POST:
+                    raise BlogError(f"A post can have at most {MAX_ATTACHMENTS_PER_POST} attachments")
+                final_id = attachment_id
+                conn.execute("INSERT INTO attachments (id, post_id, filename, content_type, size, sha256, is_text, created_at)"
+                             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                             (final_id, row["id"], filename, content_type, size, sha256, int(is_text), now))
+            else:
+                final_id = existing["id"]
+                conn.execute("UPDATE attachments SET content_type = ?, size = ?, sha256 = ?, is_text = ?, created_at = ? WHERE id = ?",
+                             (content_type, size, sha256, int(is_text), now, final_id))
+            record = self._attachment_dict(conn.execute("SELECT * FROM attachments WHERE id = ?", (final_id,)).fetchone())
+        record["replaced"] = existing is not None
+        return record
+
+    def list_attachments(self, slug: str) -> list[dict]:
+        """The files attached to a post, by name."""
+        with self._db() as conn:
+            return self._attachments_for(conn, self._require(conn, slug)["id"])
+
+    def get_attachment(self, attachment_id: str) -> dict:
+        """One attachment, with the slug and status of the post it belongs to (for deciding who may see it)."""
+        with self._db() as conn:
+            row = conn.execute("SELECT a.*, p.slug AS post_slug, p.status AS post_status FROM attachments a"
+                               " JOIN posts p ON p.id = a.post_id WHERE a.id = ?", (attachment_id,)).fetchone()
+            if row is None:
+                raise NotFound("Attachment not found")
+            return {**self._attachment_dict(row), "post_slug": row["post_slug"], "post_status": row["post_status"]}
+
+    def delete_attachment(self, slug: str, attachment_id: str) -> bool:
+        """Remove an attachment's record. Returns False if that post has no such attachment."""
+        with self._db() as conn:
+            return conn.execute("DELETE FROM attachments WHERE id = ? AND post_id = (SELECT id FROM posts WHERE slug = ?)",
+                                (attachment_id, slug)).rowcount > 0
+
     # --- discovery ---------------------------------------------------------
 
     def search_posts(self, query: str, status: str = "all", limit: int = 20) -> dict:
@@ -388,10 +487,11 @@ class BlogStore:
         with self._db() as conn:
             rows = conn.execute(f"SELECT p.* FROM posts p WHERE {' AND '.join(where)} ORDER BY {_ORDER} LIMIT ?",
                                 params + [limit]).fetchall()
-            tags = self._tags_for(conn, [row["id"] for row in rows])
+            ids = [row["id"] for row in rows]
+            tags, counts = self._tags_for(conn, ids), self._attachment_counts(conn, ids)
             posts = []
             for row in rows:
-                post = self._to_dict(row, tags[row["id"]])
+                post = self._to_dict(row, tags[row["id"]], attachment_count=counts[row["id"]])
                 post["snippet"] = self._snippet(row, terms)
                 posts.append(post)
         return {"query": query, "posts": posts, "count": len(posts)}

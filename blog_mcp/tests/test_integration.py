@@ -39,9 +39,10 @@ def free_port() -> int:
 
 
 class RunningBlog:
-    def __init__(self, data_dir, token="integration-token"):
+    def __init__(self, data_dir, token="integration-token", max_attachment_mb=25):
         self.port = free_port()
-        self.settings = Settings(data_dir=data_dir, port=self.port, password="integration password", api_token=token)
+        self.settings = Settings(data_dir=data_dir, port=self.port, password="integration password", api_token=token,
+                                 max_attachment_mb=max_attachment_mb)
         self.app = create_app(self.settings)
         self.server = uvicorn.Server(uvicorn.Config(self.app, host="127.0.0.1", port=self.port, log_level="error", access_log=False))
         self.thread = threading.Thread(target=self.server.run, daemon=True)
@@ -161,3 +162,86 @@ class TestMcpServerWithTheRealBlog:
         info = call(mcp_server, "get_blog_info").data
         assert info["blog_running"] is False and "python blog_mcp/blog/blog.py" in info["message"]
         assert "still here" in blog.get("/post/survivor")[1]
+
+
+@pytest.mark.integration
+class TestAttachmentsWithTheRealBlog:
+    CODE = "def total(values):\n    return sum(values)\n"
+
+    def test_text_attached_by_a_tool_can_be_downloaded_and_read_on_the_blog(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Analysis", body="See the code.", publish=True)
+        attached = call(mcp_server, "attach_text", slug="analysis", filename="helpers.py", content=self.CODE).data
+        assert attached["replaced"] is False and attached["markdown"] == f"[helpers.py](/files/{attached['id']})"
+        status, downloaded = blog.get(f"/files/{attached['id']}")
+        assert status == 200 and downloaded == self.CODE
+        assert "helpers.py" in blog.get("/post/analysis")[1] and "def total" in blog.get(f"/files/{attached['id']}/view")[1]
+
+    def test_the_markdown_link_works_inside_a_post(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Linked", body="placeholder", publish=True)
+        attached = call(mcp_server, "attach_text", slug="linked", filename="tool.sh", content="echo hi\n").data
+        call(mcp_server, "update_post", slug="linked", body=f"Grab the {attached['markdown']} script.")
+        assert f'href="/files/{attached["id"]}"' in blog.get("/post/linked")[1]
+
+    def test_attaching_the_same_name_again_replaces_it_and_keeps_the_link(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Versions", body="x", publish=True)
+        first = call(mcp_server, "attach_text", slug="versions", filename="notes.md", content="version one").data
+        second = call(mcp_server, "attach_text", slug="versions", filename="notes.md", content="version two").data
+        assert second["id"] == first["id"] and second["replaced"] is True
+        assert blog.get(f"/files/{first['id']}")[1] == "version two"
+        assert call(mcp_server, "list_attachments", slug="versions").data["count"] == 1
+
+    def test_an_assistant_can_read_back_what_is_attached(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Readable", body="x", publish=True)
+        attached = call(mcp_server, "attach_text", slug="readable", filename="data.csv", content="a,b\n1,2\n").data
+        read = call(mcp_server, "read_attachment", attachment_id=attached["id"]).data
+        assert (read["content"], read["truncated"], read["post_slug"]) == ("a,b\n1,2\n", False, "readable")
+        short = call(mcp_server, "read_attachment", attachment_id=attached["id"], max_bytes=3).data
+        assert (short["content"], short["truncated"]) == ("a,b", True)
+
+    def test_a_local_file_can_be_attached_and_a_binary_one_reads_as_details_only(self, mcp_server, blog, tmp_path):
+        call(mcp_server, "create_post", title="Files", body="x", publish=True)
+        local = tmp_path / "blob.bin"
+        local.write_bytes(bytes(range(256)))
+        attached = call(mcp_server, "attach_file", slug="files", file_path=str(local)).data
+        assert attached["filename"] == "blob.bin" and attached["is_text"] is False and "view_url" not in attached
+        read = call(mcp_server, "read_attachment", attachment_id=attached["id"]).data
+        assert read["content"] is None and read["size"] == 256
+
+    def test_removing_a_file(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Tidy", body="x", publish=True)
+        attached = call(mcp_server, "attach_text", slug="tidy", filename="a.txt", content="x").data
+        assert call(mcp_server, "remove_attachment", slug="tidy", attachment_id=attached["id"]).data["deleted"] is True
+        assert blog.get(f"/files/{attached['id']}")[0] == 404
+        assert "not attached" in call(mcp_server, "remove_attachment", slug="tidy", attachment_id=attached["id"]).content[0].text
+
+    def test_a_post_reports_its_attachments(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Counted", body="x", publish=True)
+        call(mcp_server, "attach_text", slug="counted", filename="a.txt", content="x")
+        post = call(mcp_server, "get_post", slug="counted").data
+        assert post["attachment_count"] == 1 and post["attachments"][0]["filename"] == "a.txt"
+        assert call(mcp_server, "list_posts").data["posts"][0]["attachment_count"] == 1
+
+    def test_a_hostile_file_name_is_cleaned_by_the_blog(self, mcp_server, blog):
+        call(mcp_server, "create_post", title="Hostile", body="x", publish=True)
+        attached = call(mcp_server, "attach_text", slug="hostile", filename="../../etc/passwd", content="x").data
+        assert attached["filename"] == "passwd"
+
+    def test_an_unknown_post_is_a_clear_error(self, mcp_server, blog):
+        assert "not found" in call(mcp_server, "attach_text", slug="ghost", filename="a.txt", content="x").content[0].text
+
+    def test_the_blogs_size_limit_is_explained(self, tmp_path, monkeypatch):
+        small = RunningBlog(tmp_path / "small-blog", max_attachment_mb=1)
+        try:
+            monkeypatch.setenv("BLOG_URL", small.url)
+            monkeypatch.setenv("BLOG_API_TOKEN", "integration-token")
+            spec = importlib.util.spec_from_file_location("blog_mcp_small", SERVER_PATH)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            call(module, "create_post", title="Host", body="x", publish=True)
+            message = call(module, "attach_text", slug="host", filename="big.txt", content="x" * (1024 * 1024 + 10)).content[0].text
+            assert "at most 1 MB" in message or "too large" in message
+            assert small.app.state.blog.store.list_attachments("host") == []
+            sys.modules.pop(spec.name, None)
+        finally:
+            small.stop()

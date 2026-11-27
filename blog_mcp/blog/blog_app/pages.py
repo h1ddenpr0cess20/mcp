@@ -14,6 +14,8 @@ from datetime import datetime
 from math import ceil
 from urllib.parse import quote, urlencode
 
+from .discovery import agent_discovery_links
+
 
 def _e(value) -> str:
     return html.escape(str(value), quote=True)
@@ -34,6 +36,16 @@ def format_date(iso: str | None) -> str:
     return f"{parsed:%B} {parsed.day}, {parsed.year}"
 
 
+def format_size(size: int) -> str:
+    """A file size for people: 512 B, 1.5 KB, 3.0 MB."""
+    value = float(size or 0)
+    for unit in ("B", "KB", "MB"):
+        if value < 1024:
+            return f"{int(value)} B" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
 def reading_minutes(word_count: int) -> int:
     return max(1, ceil((word_count or 0) / 200))
 
@@ -42,7 +54,7 @@ def _csrf_field(ctx: dict) -> str:
     return f'<input type="hidden" name="csrf" value="{_e(ctx.get("csrf") or "")}">'
 
 
-def layout(ctx: dict, title: str, content: str, query: str = "", editor: bool = False, nav: bool = True) -> str:
+def layout(ctx: dict, title: str, content: str, query: str = "", editor: bool = False, nav: bool = True, head: str = "") -> str:
     """Wrap page content in the shared shell: header, navigation, search box."""
     site = ctx["site"]
     page_title = f"{title} · {site['title']}" if title else site["title"]
@@ -73,6 +85,7 @@ def layout(ctx: dict, title: str, content: str, query: str = "", editor: bool = 
 <meta name="referrer" content="no-referrer">
 {'' if ctx.get('indexable') else '<meta name="robots" content="noindex, nofollow">'}
 <title>{_e(page_title)}</title>
+{agent_discovery_links() if ctx.get('public') else ''}{head}
 <link rel="stylesheet" href="/static/blog.css">
 {script}
 </head>
@@ -133,14 +146,14 @@ def _pager(base: str, page: int, total: int, page_size: int, extra: dict | None 
     return f'<nav class="pager">{newer}{older}</nav>'
 
 
-def post_list(ctx: dict, heading: str, listing: dict, base: str, page: int, page_size: int, empty: str) -> str:
+def post_list(ctx: dict, heading: str, listing: dict, base: str, page: int, page_size: int, empty: str, head: str = "") -> str:
     """A paginated list of published posts (home and tag pages)."""
     entries = "".join(_entry(post) for post in listing["posts"]) or f'<p class="empty">{_e(empty)}</p>'
     content = f"<h2>{_e(heading)}</h2>{entries}{_pager(base, page, listing['total'], page_size)}"
-    return layout(ctx, heading if base != "/" else "", content)
+    return layout(ctx, heading if base != "/" else "", content, head=head)
 
 
-def post_page(ctx: dict, post: dict, body_html: str) -> str:
+def post_page(ctx: dict, post: dict, body_html: str, head: str = "") -> str:
     banner = ""
     if post["status"] == "draft":
         banner = '<p class="banner">This post is a draft. Only you can see it.</p>'
@@ -149,9 +162,9 @@ def post_page(ctx: dict, post: dict, body_html: str) -> str:
         edit = f'<p class="meta"><a href="/admin/edit/{_q(post["slug"])}">Edit this post</a></p>'
     content = (
         f'<article><h1>{_e(post["title"])}</h1><p class="meta">{_meta(post)}</p>{edit}{banner}'
-        f'<div class="post-body">{body_html}</div></article>'
+        f'<div class="post-body">{body_html}</div></article>{attachments_section(post.get("attachments", []))}'
     )
-    return layout(ctx, post["title"], content)
+    return layout(ctx, post["title"], content, head=head)
 
 
 def tags_page(ctx: dict, tags: list[dict]) -> str:
@@ -282,5 +295,73 @@ placeholder="Optional. Shown in lists; defaults to the start of the post.">{_e(f
 </div>
 </div>
 <div class="bar">{''.join(buttons)}{view}<span class="meta hint">Ctrl/⌘+S saves</span></div>
-</form>{delete}"""
+</form>{attachments_editor(ctx, post)}{delete}"""
     return layout(ctx, heading, content, editor=True)
+
+
+# --- attachments -------------------------------------------------------------
+
+def _file_links(attachment: dict) -> str:
+    view = f'<a href="/files/{_q(attachment["id"])}/view">View</a> ' if attachment["is_text"] else ""
+    return f'{view}<a href="/files/{_q(attachment["id"])}">Download</a>'
+
+
+def _file_label(attachment: dict) -> str:
+    return f'<span class="file-name">{_e(attachment["filename"])}</span> <span class="meta">{_e(format_size(attachment["size"]))}</span>'
+
+
+def attachments_section(attachments: list[dict]) -> str:
+    """The files attached to a post, as shown to readers."""
+    if not attachments:
+        return ""
+    items = "".join(f"<li>{_file_label(a)} {_file_links(a)}</li>" for a in attachments)
+    return f'<section class="attachments"><h2>Attachments</h2><ul class="files">{items}</ul></section>'
+
+
+def attachment_editor_items(ctx: dict, slug: str, attachments: list[dict]) -> str:
+    """The attachment list inside the editor: each file can be linked from the text or removed."""
+    if not attachments:
+        return '<p class="empty">No files attached yet.</p>'
+    rows = []
+    for a in attachments:
+        label = a["filename"].replace("[", "").replace("]", "")
+        rows.append(
+            f'<li>{_file_label(a)} {_file_links(a)} '
+            f'<button type="button" class="link" data-insert="[{_e(label)}](/files/{_q(a["id"])})">Insert link</button> '
+            f'<form method="post" action="/admin/detach/{_q(slug)}/{_q(a["id"])}" class="inline" '
+            f'data-confirm="Remove this file from the post?">{_csrf_field(ctx)}'
+            f'<button type="submit" class="link danger">Remove</button></form></li>'
+        )
+    return f'<ul class="files">{"".join(rows)}</ul>'
+
+
+def attachments_editor(ctx: dict, post: dict | None) -> str:
+    """The attachments area under the editor. Files attach to a saved post, so a new post has to be saved first."""
+    if post is None:
+        return ('<section class="attachments"><h2>Attachments</h2>'
+                '<p class="empty">Save the post first, then you can attach files to it.</p></section>')
+    upload = (
+        f'<form method="post" action="/admin/attach/{_q(post["slug"])}" enctype="multipart/form-data" id="attach-form" class="attach">'
+        f'{_csrf_field(ctx)}<input type="file" name="file" id="attach-input" multiple required>'
+        '<button type="submit">Attach</button><span id="attach-status" class="meta" role="status"></span></form>'
+    )
+    return (
+        '<section class="attachments"><h2>Attachments</h2>'
+        '<p class="meta">Code, documents, data, anything. Readers can download them; the blog never opens or runs them.</p>'
+        f'<div id="attachment-list">{attachment_editor_items(ctx, post["slug"], post.get("attachments", []))}</div>{upload}</section>'
+    )
+
+
+def attachment_page(ctx: dict, record: dict, text: str | None, truncated: bool) -> str:
+    """A text attachment shown in the browser as escaped text. It is never interpreted as HTML or script."""
+    back = f'<a href="/post/{_q(record["post_slug"])}">Back to the post</a>'
+    head = (
+        f'<h1>{_e(record["filename"])}</h1><p class="meta">{_e(format_size(record["size"]))} · '
+        f'<a href="/files/{_q(record["id"])}">Download</a> · {back}</p>'
+    )
+    if text is None:
+        body = '<p class="empty">This file is not text, so it cannot be shown here. Download it to open it.</p>'
+    else:
+        note = '<p class="banner">Only the start of this file is shown. Download it to see all of it.</p>' if truncated else ""
+        body = f'{note}<pre class="code"><code>{_e(text)}</code></pre>'
+    return layout(ctx, record["filename"], head + body)

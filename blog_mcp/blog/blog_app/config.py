@@ -42,6 +42,7 @@ class Settings:
     public: bool = False  # True: published posts are readable without logging in
     public_url: str = ""  # absolute address used in links returned by the API; default: taken from the request
     api_token: str = ""  # empty: generated into data_dir/api_token
+    max_attachment_mb: int = 25  # largest file that can be attached to a post
     tls_cert: str = ""
     tls_key: str = ""
 
@@ -54,6 +55,12 @@ class Settings:
         if bool(self.tls_cert) != bool(self.tls_key):
             raise ValueError("BLOG_TLS_CERT and BLOG_TLS_KEY must be set together")
         self.public_url = self.public_url.rstrip("/")
+        if not 1 <= self.max_attachment_mb <= 2048:
+            raise ValueError("BLOG_MAX_ATTACHMENT_MB must be between 1 and 2048")
+
+    @property
+    def max_attachment_bytes(self) -> int:
+        return self.max_attachment_mb * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -69,6 +76,7 @@ class Settings:
             public=_flag("BLOG_PUBLIC"),
             public_url=os.getenv("BLOG_PUBLIC_URL", ""),
             api_token=os.getenv("BLOG_API_TOKEN", ""),
+            max_attachment_mb=int(os.getenv("BLOG_MAX_ATTACHMENT_MB", "25")),
             tls_cert=os.getenv("BLOG_TLS_CERT", ""),
             tls_key=os.getenv("BLOG_TLS_KEY", ""),
         )

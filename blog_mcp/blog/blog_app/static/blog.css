@@ -13,6 +13,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.65 Georgia, "Iowan Old Style", "Times New Roman", serif; }
 a { color: var(--accent); }
 .wrap { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
@@ -98,3 +99,14 @@ table.posts td.actions > * { margin-left: .6rem; }
   .pane textarea, .preview { min-height: 16rem; }
   table.posts td.actions { white-space: normal; }
 }
+
+.attachments { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.attachments h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+.files { list-style: none; padding: 0; margin: .5rem 0; font: 15px var(--ui); }
+.files li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .9rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+.file-name { font-weight: 600; word-break: break-all; }
+form.attach { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .75rem; }
+form.attach input[type=file] { width: auto; flex: 1 1 14rem; }
+pre.code { background: var(--code); padding: 1rem; overflow-x: auto; border-radius: 6px; white-space: pre; tab-size: 4;
+  font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+pre.code code { background: none; padding: 0; }

@@ -58,7 +58,8 @@ class TestSessions:
     def test_tampered_signature_is_rejected(self, auth):
         cookie, _ = auth.new_session()
         raw, sig = cookie.split(".")
-        assert auth.read_session(f"{raw}.{sig[:-2]}AA") is None
+        changed = sig[:-1] + ("A" if sig[-1] != "A" else "B")  # always differs from the real signature
+        assert auth.read_session(f"{raw}.{changed}") is None
 
     @pytest.mark.unit
     def test_session_signed_with_another_key_is_rejected(self, auth):

@@ -743,7 +743,7 @@ class TestBodyLimit:
                 sent.append(message)
 
             headers = [(b"content-length", declared)] if declared is not None else []
-            await BodyLimit(app, limit)({"type": "http", "headers": headers}, receive, send)
+            await BodyLimit(app, lambda path: limit)({"type": "http", "headers": headers, "path": "/"}, receive, send)
 
         asyncio.run(go())
         return sent

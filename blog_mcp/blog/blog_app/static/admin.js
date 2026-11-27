@@ -112,6 +112,59 @@
     }
   });
 
+  // --- attachments: choosing files uploads them in place (no reload, so unsaved text is safe) ---
+  var attachForm = document.getElementById("attach-form");
+  var attachList = document.getElementById("attachment-list");
+  if (attachForm && attachList) {
+    var attachInput = document.getElementById("attach-input");
+    var attachStatus = document.getElementById("attach-status");
+    attachForm.querySelector("button[type=submit]").hidden = true; // without JavaScript the button is the way to upload
+    attachInput.removeAttribute("required");
+
+    var sendOne = function (file) {
+      var data = new FormData();
+      data.append("file", file);
+      return fetch(attachForm.getAttribute("action"), {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrf, "Accept": "application/json" },
+        credentials: "same-origin",
+        body: data
+      }).then(function (response) {
+        return response.text().then(function (text) {
+          var json = null;
+          try { json = JSON.parse(text); } catch (ignored) { /* not JSON: a size or proxy error */ }
+          return { status: response.status, json: json };
+        });
+      }).then(function (result) {
+        if (result.json && result.json.html) { attachList.innerHTML = result.json.html; }
+        if (result.json) { return result.json.error || ""; }
+        return result.status === 413 ? "That file is too large." : "Upload failed.";
+      }).catch(function () { return "Upload failed."; });
+    };
+
+    attachInput.addEventListener("change", function () {
+      var files = Array.prototype.slice.call(attachInput.files);
+      attachInput.value = "";
+      var done = 0;
+      var firstError = "";
+      files.reduce(function (chain, file) {
+        return chain.then(function () {
+          attachStatus.textContent = "Uploading " + file.name + "…";
+          return sendOne(file).then(function (error) {
+            if (error) { firstError = firstError || file.name + ": " + error; } else { done += 1; }
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        attachStatus.textContent = firstError || (done === 1 ? "File attached." : done + " files attached.");
+      });
+    });
+
+    attachList.addEventListener("click", function (event) {
+      var button = event.target.closest && event.target.closest("button[data-insert]");
+      if (button) { insertAtCursor(button.getAttribute("data-insert")); }
+    });
+  }
+
   // --- save shortcut and leaving with unsaved edits ---
   document.addEventListener("keydown", function (event) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {

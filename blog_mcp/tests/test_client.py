@@ -279,3 +279,84 @@ class TestErrors:
     @pytest.mark.unit
     def test_errors_are_tool_errors_so_fastmcp_reports_them_cleanly(self):
         assert issubclass(BlogError, ToolError) and issubclass(BlogUnreachable, BlogError)
+
+
+class TestAttachments:
+    @pytest.mark.unit
+    def test_list(self, make_client):
+        client, session = make_client()
+        client.list_attachments("my-post")
+        assert (session.last["method"], session.last["url"]) == ("GET", "http://blog.test/api/v1/posts/my-post/attachments")
+
+    @pytest.mark.unit
+    def test_add_sends_the_bytes_as_a_multipart_file(self, make_client):
+        client, session = make_client(lambda m, u, k: make_response(201, {"id": "x"}))
+        assert client.add_attachment("p", "analysis.py", b"print(1)\n") == {"id": "x"}
+        assert (session.last["method"], session.last["url"]) == ("POST", "http://blog.test/api/v1/posts/p/attachments")
+        assert session.last["files"] == {"file": ("analysis.py", b"print(1)\n")}
+
+    @pytest.mark.unit
+    def test_attach_file_streams_a_local_file_under_its_own_name(self, make_client, tmp_path):
+        local = tmp_path / "report.csv"
+        local.write_bytes(b"a,b\n1,2\n")
+        client, session = make_client()
+        client.attach_file("p", str(local))
+        name, handle = session.last["files"]["file"]
+        assert name == "report.csv" and hasattr(handle, "read")
+
+    @pytest.mark.unit
+    def test_attach_file_can_rename_and_expands_the_home_directory(self, make_client, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / "x.txt").write_text("hi")
+        client, session = make_client()
+        client.attach_file("p", "~/x.txt", filename="renamed.txt")
+        assert session.last["files"]["file"][0] == "renamed.txt"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("bad", ["/no/such/file.txt", "~/definitely/missing.bin"])
+    def test_attach_file_missing(self, make_client, bad):
+        client, session = make_client()
+        with pytest.raises(BlogError, match="No file at"):
+            client.attach_file("p", bad)
+        assert session.calls == []
+
+    @pytest.mark.unit
+    def test_a_directory_is_not_a_file(self, make_client, tmp_path):
+        client, _ = make_client()
+        with pytest.raises(BlogError, match="No file"):
+            client.attach_file("p", str(tmp_path))
+
+    @pytest.mark.unit
+    def test_read(self, make_client):
+        client, session = make_client()
+        client.read_attachment("a" * 32)
+        assert session.last["url"] == f"http://blog.test/api/v1/attachments/{'a' * 32}" and session.last["params"] is None
+        client.read_attachment("a" * 32, max_bytes=500)
+        assert session.last["params"] == {"max_bytes": 500}
+
+    @pytest.mark.unit
+    def test_remove(self, make_client):
+        client, session = make_client()
+        client.remove_attachment("p", "b" * 32)
+        assert (session.last["method"], session.last["url"]) == ("DELETE", f"http://blog.test/api/v1/posts/p/attachments/{'b' * 32}")
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("hostile", ["../../admin", "a/b", "a?b=c", "..%2f"])
+    def test_ids_and_slugs_cannot_alter_the_request_path(self, make_client, hostile):
+        client, session = make_client()
+        client.read_attachment(hostile)
+        assert session.last["url"].count("/") == 6  # http://host/api/v1/attachments/<one segment>
+        client.remove_attachment(hostile, hostile)
+        assert session.last["url"].count("/") == 8
+
+    @pytest.mark.unit
+    def test_a_size_refusal_that_is_not_json_is_still_explained(self, make_client):
+        client, _ = make_client(lambda m, u, k: make_response(413, text="Request body too large"))
+        with pytest.raises(BlogError, match="BLOG_MAX_ATTACHMENT_MB"):
+            client.add_attachment("p", "big.bin", b"x")
+
+    @pytest.mark.unit
+    def test_the_blogs_own_size_message_comes_through(self, make_client):
+        client, _ = make_client(lambda m, u, k: make_response(413, {"error": "Files can be at most 25 MB"}))
+        with pytest.raises(BlogError, match="at most 25 MB"):
+            client.add_attachment("p", "big.bin", b"x")

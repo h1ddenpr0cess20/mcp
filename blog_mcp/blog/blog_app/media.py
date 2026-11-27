@@ -42,7 +42,7 @@ def save_image(media_dir: Path, data: bytes) -> str:
 
 def media_path(media_dir: Path, name: str) -> Path | None:
     """The file for a media name, or None if the name is not one we generate or the file is missing."""
-    if not NAME_PATTERN.match(name):
+    if not NAME_PATTERN.fullmatch(name):  # fullmatch: `$` would also accept a trailing newline
         return None
     path = media_dir / name
     return path if path.is_file() else None

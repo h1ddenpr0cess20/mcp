@@ -198,6 +198,93 @@ def upload_image(file_path: str, alt_text: str = "") -> dict:
     return result
 
 
+def _attached(result: dict) -> dict:
+    """Add a Markdown link to an attachment's details, ready to paste into a post."""
+    label = result["filename"].replace("[", "").replace("]", "")
+    result["markdown"] = f"[{label}](/files/{result['id']})"
+    return result
+
+
+@mcp.tool
+def attach_text(slug: str, filename: str, content: str) -> dict:
+    """Create a file from text and attach it to a post, so readers can download it.
+
+    Use this for code, scripts, data, configuration, or notes you have written (for example
+    "analysis.py", "results.csv", "config.json"). No file on disk is needed. Attaching a file with a
+    name the post already has replaces that file, keeping its address.
+
+    Args:
+        slug: Slug of the post to attach to.
+        filename: Name for the file, including its extension (e.g. "analysis.py").
+        content: The file's text.
+
+    Returns:
+        Dict with id, filename, size, content_type, is_text, replaced, url, view_url (for text files),
+        and markdown (a link to paste into the post body).
+    """
+    return _attached(_client.add_attachment(slug, filename, content.encode("utf-8")))
+
+
+@mcp.tool
+def attach_file(slug: str, file_path: str, filename: str = "") -> dict:
+    """Attach a file from this computer to a post, so readers can download it.
+
+    Any kind of file up to the blog's size limit (25 MB by default): code, documents, data, archives.
+    Attaching a file with a name the post already has replaces that file, keeping its address.
+
+    Args:
+        slug: Slug of the post to attach to.
+        file_path: Path of the file on the machine this server runs on.
+        filename: Name to give it on the post (empty to use the file's own name).
+
+    Returns:
+        Dict with id, filename, size, content_type, is_text, replaced, url, view_url (for text files),
+        and markdown (a link to paste into the post body).
+    """
+    return _attached(_client.attach_file(slug, file_path, filename=filename))
+
+
+@mcp.tool
+def list_attachments(slug: str) -> dict:
+    """List the files attached to a post.
+
+    Args:
+        slug: Slug of the post.
+
+    Returns:
+        Dict with attachments (each with id, filename, size, content_type, is_text, url) and count.
+    """
+    return _client.list_attachments(slug)
+
+
+@mcp.tool
+def read_attachment(attachment_id: str, max_bytes: int = 0) -> dict:
+    """Read an attached file's details and, if it is a text file, its content.
+
+    Args:
+        attachment_id: The attachment's id, from list_attachments or when it was attached.
+        max_bytes: Most bytes of content to return (0 for the default of 256 KB; at most 1 MB).
+
+    Returns:
+        Dict with filename, size, post_slug, is_text, content (null for a binary file), and truncated.
+    """
+    return _client.read_attachment(attachment_id, max_bytes=max_bytes)
+
+
+@mcp.tool
+def remove_attachment(slug: str, attachment_id: str) -> dict:
+    """Remove a file from a post. This deletes the file.
+
+    Args:
+        slug: Slug of the post it is attached to.
+        attachment_id: The attachment's id, from list_attachments.
+
+    Returns:
+        Dict with slug, id, and deleted.
+    """
+    return _client.remove_attachment(slug, attachment_id)
+
+
 @mcp.tool
 def get_blog_info() -> dict:
     """Check the blog: its title, address, whether it is running, and post counts.
@@ -213,10 +300,13 @@ def get_blog_info() -> dict:
         info = _client.info()
     except BlogUnreachable as exc:
         return {"blog_url": _client.base_url, "blog_running": False, "message": str(exc)}
-    return {
+    result = {
         "blog_url": info["url"], "blog_running": True, "title": info["title"], "description": info["description"],
         "public": info["public"], "posts": info["posts"],
     }
+    if "agent_urls" in info:  # only a public blog has these
+        result["agent_urls"] = info["agent_urls"]
+    return result
 
 
 if __name__ == "__main__":
