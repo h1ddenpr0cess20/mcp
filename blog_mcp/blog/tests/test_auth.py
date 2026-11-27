@@ -36,11 +36,14 @@ class TestSessions:
         read = auth.read_session(cookie)
         assert read["u"] == "owner"
         assert read["csrf"] == data["csrf"]
+        assert read["sid"] == data["sid"]
         assert read["exp"] > time.time()
 
     @pytest.mark.unit
-    def test_each_session_gets_its_own_csrf_token(self, auth):
-        assert auth.new_session()[1]["csrf"] != auth.new_session()[1]["csrf"]
+    def test_each_session_gets_its_own_csrf_token_and_session_id(self, auth):
+        first, second = auth.new_session()[1], auth.new_session()[1]
+        assert first["csrf"] != second["csrf"]
+        assert first["sid"] != second["sid"]
 
     @pytest.mark.unit
     @pytest.mark.parametrize("cookie", [None, "", "nodot", ".", "a.b", "e30.e30", "\xff.\xff", "x" * 5000])

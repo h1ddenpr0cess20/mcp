@@ -2,10 +2,12 @@
 name = "blog"
 version = "0.1.0"
 description = "A private blog with an in-browser editor, a JSON API, and password login."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "starlette>=1.10.0",
     "uvicorn>=0.54.0",
+    "h11>=0.16.0",
+    "anyio>=4.14.2,<5",
     "python-multipart>=0.0.34",
     "markdown-it-py>=4.3.0",
     "python-dotenv>=1.2.3",

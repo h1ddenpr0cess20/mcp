@@ -15,6 +15,7 @@ from starlette.applications import Starlette
 from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Mount, Route
@@ -74,6 +75,8 @@ class SecurityHeaders:
                 headers = MutableHeaders(scope=message)
                 for name, value in SECURITY_HEADERS.items():
                     headers.setdefault(name, value)
+                if scope.get("scheme") == "https":
+                    headers.setdefault("Strict-Transport-Security", "max-age=31536000")
                 if not self.indexable:
                     headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
                 headers.setdefault("Cache-Control", "public, max-age=3600" if static else "private, no-store")
@@ -185,7 +188,10 @@ class BlogApp:
 
     def session(self, request: Request) -> dict | None:
         if not hasattr(request.state, "session"):
-            request.state.session = self.auth.read_session(request.cookies.get(SESSION_COOKIE))
+            session = self.auth.read_session(request.cookies.get(SESSION_COOKIE))
+            if session is not None and not self.store.has_login_session(session["sid"]):
+                session = None
+            request.state.session = session
         return request.state.session
 
     def ctx(self, request: Request) -> dict:
@@ -547,7 +553,8 @@ class BlogApp:
             wrong = pages.login_page(self.ctx(request), "Wrong username or password.", next_url, _field(form, "username"))
             return HTMLResponse(wrong, 401)
         self.throttle.reset(key)
-        cookie, _ = self.auth.new_session()
+        cookie, session = self.auth.new_session()
+        self.store.create_login_session(session["sid"], session["exp"])
         response = RedirectResponse(next_url, status_code=303)
         response.set_cookie(SESSION_COOKIE, cookie, max_age=SESSION_SECONDS, httponly=True, samesite="lax",
                             secure=request.url.scheme == "https", path="/")
@@ -558,6 +565,8 @@ class BlogApp:
         form = await request.form()
         if session is not None and not Auth.check_csrf(session, _field(form, "csrf")):
             return self.csrf_failed(request)
+        if session is not None:
+            self.store.revoke_login_session(session["sid"])
         response = RedirectResponse("/login", status_code=303)
         response.delete_cookie(SESSION_COOKIE, path="/")
         return response
@@ -1016,7 +1025,11 @@ def create_app(settings: Settings) -> Starlette:
     ]
     app = Starlette(
         routes=routes,
-        middleware=[Middleware(SecurityHeaders, indexable=settings.public), Middleware(BodyLimit, limit_for=request_limit_for(settings))],
+        middleware=[
+            Middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts),
+            Middleware(SecurityHeaders, indexable=settings.public),
+            Middleware(BodyLimit, limit_for=request_limit_for(settings)),
+        ],
         exception_handlers={HTTPException: http_error, Exception: server_error},
     )
     app.state.blog = blog

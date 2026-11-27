@@ -174,6 +174,21 @@ class TestPublicMode:
         assert 'href="/login"' in page and "/admin" not in page
 
 
+class TestTrustedHosts:
+    @pytest.mark.integration
+    def test_untrusted_host_header_is_rejected(self, public_site):
+        response = public_site.browser().get("/", headers={"Host": "attacker.example"})
+        assert response.status == 400 and "Invalid host header" in response.text
+
+    @pytest.mark.integration
+    def test_allowlisted_host_and_configured_public_origin(self, make_site):
+        site = make_site(public=True, allowed_hosts=["127.0.0.1", "blog.example.test"],
+                         public_url="https://blog.example.test")
+        response = site.browser().api("GET", "/api/v1/info", headers={"Host": "blog.example.test"})
+        assert response.status == 200
+        assert response.json()["url"] == "https://blog.example.test"
+
+
 class TestLogin:
     @pytest.mark.integration
     def test_login_page(self, site):
@@ -213,6 +228,7 @@ class TestLogin:
         response = site.browser().post("/login", form={"username": USERNAME, "password": PASSWORD},
                                        headers={"X-Forwarded-Proto": "https"})
         assert "Secure" in response.set_cookies()[0]
+        assert response.headers["strict-transport-security"] == "max-age=31536000"
 
     @pytest.mark.integration
     @pytest.mark.parametrize("target", [
@@ -267,9 +283,13 @@ class TestLogin:
         assert admin.post("/logout", form={}).status == 403
         assert admin.get("/admin").status == 200  # still logged in
         assert admin.post("/logout", form={"csrf": "wrong"}).status == 403
+        copied_cookie = admin.cookies["blog_session"]
         response = admin.post("/logout", form={"csrf": admin.csrf()})
         assert response.status == 303 and response.location == "/login"
         assert admin.get("/admin").status == 303
+        replay = site.browser()
+        replay.cookies["blog_session"] = copied_cookie
+        assert replay.get("/admin").status == 303
 
     @pytest.mark.integration
     def test_a_session_survives_a_server_restart_but_not_a_password_change(self, make_site):

@@ -52,6 +52,7 @@ Copy `.env.example` to `.env` and edit as needed.
 | `BLOG_DESCRIPTION` | *(empty)* | Tagline under the name |
 | `BLOG_HOST` | `127.0.0.1` | Address to listen on |
 | `BLOG_PORT` | `9901` | Port to listen on |
+| `BLOG_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Comma-separated HTTP Host allowlist; add your public domain when proxied |
 | `BLOG_USERNAME` | `owner` | Login name |
 | `BLOG_PASSWORD` | *(none)* | A login password to hash at startup. Prefer `set-password`, so no plain text is in a config file |
 | `BLOG_PASSWORD_HASH` | *(none)* | A password hash from `blog.py hash-password`; wins over `BLOG_PASSWORD` |
@@ -71,7 +72,8 @@ Everything the editor does is also available as a JSON API under `/api/v1`, prot
 ## Security Notes
 
 - **Your password is never stored.** Only a salted PBKDF2-SHA256 hash (600,000 iterations) is kept, so a copied data folder or backup does not reveal it. A password given in `BLOG_PASSWORD` is hashed at startup, and the blog holds no copy of the plain text. (An earlier version stored it as plain text. On upgrade the blog converts it to a hash and deletes the old file automatically.)
-- Tokens are compared in constant time. Sessions are signed, expire after 14 days, and stop working if you change the password.
+- Tokens are compared in constant time. Sessions are signed, expire after 14 days, are checked against SQLite, and are revoked server-side at logout (including copied cookies). Password changes invalidate all existing sessions.
+- Requests with a Host header outside `BLOG_ALLOWED_HOSTS` are rejected before URL generation; set `BLOG_PUBLIC_URL` to the canonical HTTPS origin when using a public domain.
 - Every state-changing form and background request carries a CSRF token.
 - Pages never run inline scripts. The Content-Security-Policy allows scripts and styles only from the blog itself.
 - Raw HTML in a post is shown as text rather than run, and `javascript:` links are not turned into links.
