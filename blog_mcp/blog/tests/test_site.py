@@ -279,7 +279,7 @@ class TestLogin:
         assert browser.get("/admin").status == 303
 
     @pytest.mark.integration
-    def test_logout_requires_the_csrf_token(self, admin):
+    def test_logout_requires_the_csrf_token(self, site, admin):
         assert admin.post("/logout", form={}).status == 403
         assert admin.get("/admin").status == 200  # still logged in
         assert admin.post("/logout", form={"csrf": "wrong"}).status == 403

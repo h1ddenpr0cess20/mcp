@@ -53,7 +53,13 @@ class Auth:
 
     def new_session(self) -> tuple[str, dict]:
         """Return (cookie value, session data) for a fresh login."""
-        data = {"u": self.username, "sid": secrets.token_hex(32), "csrf": secrets.token_urlsafe(24), "exp": int(time.time()) + SESSION_SECONDS, "v": self._fingerprint}
+        data = {
+            "u": self.username,
+            "sid": secrets.token_hex(32),
+            "csrf": secrets.token_urlsafe(24),
+            "exp": int(time.time()) + SESSION_SECONDS,
+            "v": self._fingerprint,
+        }
         raw = _b64(json.dumps(data, separators=(",", ":")).encode("utf-8"))
         return f"{raw}.{self._sign(raw)}", data
 

@@ -537,7 +537,6 @@ class BlogStore:
             "tags": tag_count,
         }
 
-    
     # --- login sessions ----------------------------------------------------
 
     def create_login_session(self, session_id: str, expires_at: int) -> None:
