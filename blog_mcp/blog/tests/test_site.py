@@ -770,3 +770,37 @@ class TestBodyLimit:
     def test_a_lying_content_length_cannot_smuggle_more(self):
         with pytest.raises(HTTPException):
             self.run(b"5", [b"x" * 60, b"x" * 60])
+
+
+class TestThePasswordNeverLeaks:
+    @pytest.mark.integration
+    def test_after_logging_in_and_using_the_blog_the_password_is_nowhere(self, site):
+        needle = PASSWORD.encode()
+        browser = site.browser()
+        seen = [browser.post("/login", form={"username": USERNAME, "password": PASSWORD, "next": "/admin"})]
+        seen.append(browser.post("/admin/new", form={"csrf": browser.csrf(), "title": "A post", "body": "text", "action": "publish"}))
+        for path in ("/", "/admin", "/admin/new", "/admin/edit/a-post", "/post/a-post", "/tags", "/search?q=text", "/login"):
+            seen.append(browser.get(path))
+        seen.append(site.browser().api("GET", "/api/v1/info"))
+        seen.append(site.browser().post("/login", form={"username": USERNAME, "password": "wrong guess"}))
+        for response in seen:
+            assert needle not in response.body and PASSWORD not in repr(response.raw_headers)
+        on_disk = b"".join(p.read_bytes() for p in site.settings.data_dir.rglob("*") if p.is_file())
+        assert needle not in on_disk
+
+    @pytest.mark.integration
+    def test_the_session_cookie_carries_no_password_or_hash(self, site):
+        import base64
+        import json
+
+        browser = site.browser()
+        browser.post("/login", form={"username": USERNAME, "password": PASSWORD})
+        payload = browser.cookies["blog_session"].split(".")[0]
+        decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
+        assert PASSWORD not in decoded and "pbkdf2" not in decoded
+        assert set(json.loads(decoded)) == {"u", "csrf", "exp", "v"}
+
+    @pytest.mark.integration
+    def test_a_failed_login_page_never_echoes_what_was_typed_as_the_password(self, site):
+        response = site.browser().post("/login", form={"username": USERNAME, "password": "hunter2-typed-by-mistake"})
+        assert response.status == 401 and "hunter2-typed-by-mistake" not in response.text

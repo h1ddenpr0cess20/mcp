@@ -10,11 +10,14 @@ pip install -r blog_mcp/blog/requirements.txt
 python blog_mcp/blog/blog.py
 ```
 
-Open `http://127.0.0.1:9901` and log in as `owner`. The first time the blog starts it generates a password, **prints it in the terminal (only that once)**, and saves it to `~/mcp-blog/blog_password`. If you missed it:
+Open `http://127.0.0.1:9901` and log in as `owner`. The first time the blog starts it generates a password and **prints it in the terminal, once**. Write it down: the blog stores only a salted hash of it, never the password itself, so it cannot be shown again. If you lose it, or want your own, set a new one:
 
 ```bash
-cat ~/mcp-blog/blog_password
+python blog_mcp/blog/blog.py set-password              # type a new password
+python blog_mcp/blog/blog.py set-password --generate   # or have one generated and shown once
 ```
+
+Then restart the blog.
 
 Then click **New post**. To choose your own password, title, or port, copy `blog_mcp/blog/.env.example` to `blog_mcp/blog/.env` and edit it.
 
@@ -50,7 +53,8 @@ Copy `.env.example` to `.env` and edit as needed.
 | `BLOG_HOST` | `127.0.0.1` | Address to listen on |
 | `BLOG_PORT` | `9901` | Port to listen on |
 | `BLOG_USERNAME` | `owner` | Login name |
-| `BLOG_PASSWORD` | *(generated)* | Login password; unset generates one into `$BLOG_DIR/blog_password` |
+| `BLOG_PASSWORD` | *(none)* | A login password to hash at startup. Prefer `set-password`, so no plain text is in a config file |
+| `BLOG_PASSWORD_HASH` | *(none)* | A password hash from `blog.py hash-password`; wins over `BLOG_PASSWORD` |
 | `BLOG_API_TOKEN` | *(generated)* | Token for the API; unset generates one into `$BLOG_DIR/api_token` |
 | `BLOG_PUBLIC` | `false` | `true` lets anyone read published posts |
 | `BLOG_PUBLIC_URL` | *(from the request)* | Address used in links the API returns, when behind a proxy |
@@ -66,7 +70,8 @@ Everything the editor does is also available as a JSON API under `/api/v1`, prot
 
 ## Security Notes
 
-- Passwords and tokens are compared in constant time. Sessions are signed, expire after 14 days, and stop working if you change the password.
+- **Your password is never stored.** Only a salted PBKDF2-SHA256 hash (600,000 iterations) is kept, so a copied data folder or backup does not reveal it. A password given in `BLOG_PASSWORD` is hashed at startup, and the blog holds no copy of the plain text. (An earlier version stored it as plain text. On upgrade the blog converts it to a hash and deletes the old file automatically.)
+- Tokens are compared in constant time. Sessions are signed, expire after 14 days, and stop working if you change the password.
 - Every state-changing form and background request carries a CSRF token.
 - Pages never run inline scripts. The Content-Security-Policy allows scripts and styles only from the blog itself.
 - Raw HTML in a post is shown as text rather than run, and `javascript:` links are not turned into links.
@@ -76,7 +81,7 @@ Everything the editor does is also available as a JSON API under `/api/v1`, prot
 What it does not do:
 
 - It is a single-user blog. There are no accounts, comments, or feeds.
-- There is no "forgot password" page. To change the password, edit `blog_password` (or `BLOG_PASSWORD`) and restart; that also signs every session out.
+- There is no "forgot password" page. Run `python blog_mcp/blog/blog.py set-password` and restart; that also signs every session out.
 - The database is not encrypted at rest. Use disk encryption if that matters to you.
 - Login lockouts are kept in memory per client address, so they reset when the blog restarts.
 - A post that embeds an `https://` image makes the reader's browser fetch it from that host.

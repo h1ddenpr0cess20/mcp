@@ -5,11 +5,12 @@ import time
 import pytest
 
 from blog_app.auth import SESSION_SECONDS, Auth, LoginThrottle
+from blog_app.passwords import hash_password, verify_password
 
 
 @pytest.fixture
 def auth():
-    return Auth("owner", "pw", "s" * 32, "api-token-value")
+    return Auth("owner", hash_password("pw"), "s" * 32, "api-token-value")
 
 
 class TestLogin:
@@ -23,7 +24,7 @@ class TestLogin:
 
     @pytest.mark.unit
     def test_unicode_credentials_do_not_crash(self):
-        auth = Auth("owner", "pässwörd-日本", "s" * 32, "t")
+        auth = Auth("owner", hash_password("pässwörd-日本"), "s" * 32, "t")
         assert auth.check_login("owner", "pässwörd-日本") is True
         assert auth.check_login("owner", "passwörd-日本") is False
 
@@ -61,7 +62,7 @@ class TestSessions:
 
     @pytest.mark.unit
     def test_session_signed_with_another_key_is_rejected(self, auth):
-        other = Auth("owner", "pw", "z" * 32, "t")
+        other = Auth("owner", hash_password("pw"), "z" * 32, "t")
         assert auth.read_session(other.new_session()[0]) is None
 
     @pytest.mark.unit
@@ -78,12 +79,12 @@ class TestSessions:
     @pytest.mark.unit
     def test_changing_the_password_signs_everyone_out(self, auth):
         cookie, _ = auth.new_session()
-        assert Auth("owner", "new password", "s" * 32, "api-token-value").read_session(cookie) is None
+        assert Auth("owner", hash_password("new password"), "s" * 32, "api-token-value").read_session(cookie) is None
 
     @pytest.mark.unit
     def test_changing_the_username_signs_everyone_out(self, auth):
         cookie, _ = auth.new_session()
-        assert Auth("someone-else", "pw", "s" * 32, "t").read_session(cookie) is None
+        assert Auth("someone-else", hash_password("pw"), "s" * 32, "t").read_session(cookie) is None
 
 
 class TestCsrf:
@@ -180,3 +181,30 @@ class TestLoginThrottle:
         t["v"] += 11
         throttle.record_failure("one-more")
         assert len(throttle._failures) < 10
+
+
+class TestAuthHoldsOnlyAHash:
+    @pytest.mark.unit
+    def test_the_password_is_not_kept_on_the_object(self):
+        auth = Auth("owner", hash_password("a very secret password"), "s" * 32, "tok")
+        assert "a very secret password" not in repr(vars(auth))
+
+    @pytest.mark.unit
+    def test_setting_the_same_password_again_still_signs_sessions_out(self):
+        old = Auth("owner", hash_password("pw"), "s" * 32, "tok")
+        cookie, _ = old.new_session()
+        assert Auth("owner", hash_password("pw"), "s" * 32, "tok").read_session(cookie) is None  # new salt, new hash
+
+    @pytest.mark.unit
+    def test_a_wrong_username_still_does_the_password_work(self, monkeypatch):
+        calls = []
+        real = verify_password
+        monkeypatch.setattr("blog_app.auth.verify_password", lambda *a: calls.append(a) or real(*a))
+        Auth("owner", hash_password("pw"), "s" * 32, "t").check_login("someone-else", "pw")
+        assert len(calls) == 1  # no early exit that would reveal whether the username exists
+
+    @pytest.mark.unit
+    def test_a_malformed_stored_hash_never_lets_anyone_in(self):
+        auth = Auth("owner", "not-a-hash", "s" * 32, "t")
+        assert auth.check_login("owner", "not-a-hash") is False
+        assert auth.check_login("owner", "") is False

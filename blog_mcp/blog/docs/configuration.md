@@ -73,18 +73,19 @@ cp blog_mcp/blog/.env.example blog_mcp/blog/.env
 python blog_mcp/blog/blog.py
 ```
 
-The first time it starts, it prints your login, including the generated password, once:
+The first time it starts from a terminal, it generates a password, prints your login once, and stores only a hash of the password:
 
 ```
 [blog] 'Private Blog' is running at http://127.0.0.1:9901  (private: everything needs a login)
 [blog] Log in with:
 [blog]     username: owner
 [blog]     password: <your generated password>
-[blog] That password was just generated and saved to /home/you/mcp-blog/blog_password. It is only printed this once.
+[blog] Write it down now: only a hash is stored (in /home/you/mcp-blog/password_hash), so it cannot be shown again.
+[blog] To choose a different password later, run: python blog_mcp/blog/blog.py set-password
 [blog] The MCP server uses the API token in the file /home/you/mcp-blog/api_token
 ```
 
-On later starts it only says where the password is stored. The password is printed only when the blog is started from an interactive terminal, never into a log or a service's output, so if you run it as a service, read the password from the file.
+On later starts it does not show the password; it tells you how to set a new one. The password is only ever shown to an interactive terminal, never written into a log or a service's output. If there is no password yet and the blog is not started from a terminal (for example as a service), it refuses to start and tells you to run `python blog_mcp/blog/blog.py set-password` first.
 
 Stop it with `Ctrl+C`. If the port is already in use it stops with an error instead of starting twice; change `BLOG_PORT`.
 
@@ -102,7 +103,7 @@ A health check for monitors is available at `/healthz` (answers `ok`, no login n
 |-----------------|-------------|
 | `blog.db`       | SQLite database: every post, tag, and timestamp |
 | `media/`        | Uploaded images, under random names |
-| `blog_password` | Generated login password (only when `BLOG_PASSWORD` is unset) |
+| `password_hash` | Salted hash of the login password (the password itself is never stored) |
 | `api_token`     | Generated API token (only when `BLOG_API_TOKEN` is unset) |
 | `secret_key`    | Key that signs login sessions |
 
@@ -114,14 +115,34 @@ Limits: titles up to 200 characters, summaries up to 500, bodies up to 1,000,000
 
 ## Logging In and Changing the Password
 
-| Variable         | Default       | Description |
-|------------------|---------------|-------------|
-| `BLOG_USERNAME`  | `owner`       | Login name (must not contain `:`) |
-| `BLOG_PASSWORD`  | *(generated)* | Login password |
+| Variable              | Default | Description |
+|-----------------------|---------|-------------|
+| `BLOG_USERNAME`       | `owner` | Login name (must not contain `:`) |
+| `BLOG_PASSWORD`       | *(none)* | A password to hash at startup (see below) |
+| `BLOG_PASSWORD_HASH`  | *(none)* | A ready-made password hash; takes priority over `BLOG_PASSWORD` |
 
-With `BLOG_PASSWORD` unset, a random password is generated the first time and kept in `$BLOG_DIR/blog_password`. To pick your own, set `BLOG_PASSWORD` (nothing is then written to disk), or replace the contents of that file.
+**The blog never stores your password.** It keeps a salted hash (PBKDF2-SHA256, 600,000 iterations) in `$BLOG_DIR/password_hash`, readable only by you. Anyone who gets a copy of the data folder or a backup cannot read your password from it, and cannot try guesses against it faster than the hash allows.
 
-Restart the blog after changing the password. Everyone who was logged in is signed out, because sessions are tied to the password.
+To set or change the password:
+
+```bash
+python blog_mcp/blog/blog.py set-password              # prompts twice (at least 8 characters)
+python blog_mcp/blog/blog.py set-password --generate   # generates a strong one and shows it once
+```
+
+Restart the blog afterwards. Everyone who was logged in is signed out, because sessions are tied to the password.
+
+**Keeping the password out of config files.** `BLOG_PASSWORD` works, but it leaves the plain text in your `.env` and in the process's environment. If you set the password in the environment, prefer a hash:
+
+```bash
+python blog_mcp/blog/blog.py hash-password
+```
+
+It asks for a password and prints a line to put in your `.env` as `BLOG_PASSWORD_HASH=...`. If either variable is set it takes priority over the stored hash.
+
+**Upgrading from an earlier version.** Earlier versions kept the password in plain text in a file named `blog_password`. When the blog starts it converts that file to a hash, deletes the plain-text file, and tells you so. Your password stays the same. A copy of the old file in a backup is still plain text; delete or replace any such backup.
+
+**The API token is different.** It must stay readable, because the MCP server presents it on every request and finds it in `$BLOG_DIR/api_token`. That file is owner-only, and the token only works for the API (it cannot log in to the website or the editor). If you want it out of a file, set `BLOG_API_TOKEN` yourself and give the same value to the MCP server.
 
 Sessions last 14 days. After 5 wrong passwords from one address within 15 minutes, that address is locked out until the window passes, even if the right password is then entered.
 

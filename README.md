@@ -92,7 +92,7 @@ The MCP server:
 - Reports whether the blog is running, and says how to start it when it isn't
 - Keeps no data of its own, and the blog keeps working when it is off
 
-**Requirements**: Nothing beyond Python; the blog generates its login password on first run, and the MCP server finds the blog's API token itself when both are on the same computer
+**Requirements**: Nothing beyond Python; the blog generates a login password on first run and stores only a salted hash of it, and the MCP server finds the blog's API token itself when both are on the same computer
 
 ### Colab Shell MCP (`colab_shell_mcp/`)
 Shell execution and file operations inside a Google Colab runtime, with the same

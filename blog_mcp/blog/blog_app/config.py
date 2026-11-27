@@ -22,14 +22,6 @@ def load_or_create_secret(path: Path, nbytes: int = 24) -> str:
     return value
 
 
-def has_secret(path: Path) -> bool:
-    """True if a non-empty secret is already stored at `path`."""
-    try:
-        return bool(path.read_text(encoding="utf-8").strip())
-    except OSError:
-        return False
-
-
 def _flag(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None or not value.strip():
@@ -45,7 +37,8 @@ class Settings:
     title: str = "Private Blog"
     description: str = ""
     username: str = "owner"
-    password: str = ""  # empty: generated into data_dir/blog_password
+    password: str = ""  # plaintext, from BLOG_PASSWORD; hashed in memory at startup and never written anywhere
+    password_hash: str = ""  # from BLOG_PASSWORD_HASH: a hash made by `blog.py hash-password`; wins over `password`
     public: bool = False  # True: published posts are readable without logging in
     public_url: str = ""  # absolute address used in links returned by the API; default: taken from the request
     api_token: str = ""  # empty: generated into data_dir/api_token
@@ -72,6 +65,7 @@ class Settings:
             description=os.getenv("BLOG_DESCRIPTION", ""),
             username=os.getenv("BLOG_USERNAME", "owner"),
             password=os.getenv("BLOG_PASSWORD", ""),
+            password_hash=os.getenv("BLOG_PASSWORD_HASH", ""),
             public=_flag("BLOG_PUBLIC"),
             public_url=os.getenv("BLOG_PUBLIC_URL", ""),
             api_token=os.getenv("BLOG_API_TOKEN", ""),

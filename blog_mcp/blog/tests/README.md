@@ -7,6 +7,9 @@ This directory contains tests for the blog application: its storage and rules, M
 - `test_store.py` - Unit tests for BlogStore (posts, validation, versions and conflicts, search, tags)
 - `test_render.py` - Unit tests for Markdown rendering and plain-text helpers
 - `test_auth.py` - Sessions, CSRF tokens, API token, and login lockout
+- `test_passwords.py` - Password hashing, the hash file, and migrating an old plaintext file
+- `test_credentials.py` - How the blog finds its credential at startup, and proof the password is never stored
+- `test_cli.py` - `blog.py` first start, `set-password`, and `hash-password`, including the real program as a subprocess
 - `test_media.py` - Image validation and storage
 - `test_config.py` - Settings and generated secrets
 - `test_site.py` - The website, login, admin editor, uploads, and headers, over real HTTP
@@ -23,6 +26,7 @@ This directory contains tests for the blog application: its storage and rules, M
 - Hostile titles, tags, summaries, bodies, and search text are escaped on every page; scripts in posts never run
 - Uploads are checked by content (SVG, HTML, and executables are refused), size-limited even when chunked, and cannot be used to read other files
 - Owner-only permissions on the data directory, database, and secrets
+- The login password is stored only as a salted hash: it is found nowhere in the data folder, in any response, or in the app's memory, and an old plaintext password file is converted and deleted on upgrade
 
 ### Behavior
 - Writing, editing, publishing, unpublishing, and deleting through both the website and the API

@@ -162,6 +162,13 @@ class RunningBlog:
         self._thread.join(timeout=10)
 
 
+@pytest.fixture(autouse=True)
+def cheap_password_hashing(monkeypatch):
+    """Real hashing takes ~0.3 s a time, which would add minutes across hundreds of logins. Tests that
+    check the real work factor read passwords.DEFAULT_ITERATIONS, which this does not touch."""
+    monkeypatch.setattr("blog_app.passwords.ITERATIONS", 1000)
+
+
 @pytest.fixture
 def blog(tmp_path):
     """A BlogStore on an empty database in a temp directory."""

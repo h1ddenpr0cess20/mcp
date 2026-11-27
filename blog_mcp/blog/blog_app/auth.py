@@ -12,6 +12,8 @@ import secrets
 import time
 from collections.abc import Callable
 
+from .passwords import verify_password
+
 SESSION_COOKIE = "blog_session"
 SESSION_SECONDS = 14 * 24 * 3600
 
@@ -27,20 +29,20 @@ def _same(a: str, b: str) -> bool:
 class Auth:
     """Checks credentials and issues/reads session cookies and API tokens."""
 
-    def __init__(self, username: str, password: str, secret_key: str, api_token: str):
+    def __init__(self, username: str, password_hash: str, secret_key: str, api_token: str):
         self.username = username
-        self._password = password
+        self._password_hash = password_hash  # the password itself is never held
         self._key = secret_key.encode("utf-8")
         self._api_token = api_token
-        # Changing the password changes this value, which signs every existing session out.
-        self._fingerprint = hmac.new(self._key, password.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        # Setting a new password changes this value, which signs every existing session out.
+        self._fingerprint = hmac.new(self._key, password_hash.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
 
     # --- password login ----------------------------------------------------
 
     def check_login(self, username: str, password: str) -> bool:
-        """Compare both fields in constant time, without short-circuiting on the first miss."""
+        """Check both fields without short-circuiting, so a wrong username takes as long as a wrong password."""
         user_ok = _same(username, self.username)
-        password_ok = _same(password, self._password)
+        password_ok = verify_password(password, self._password_hash)
         return user_ok and password_ok
 
     # --- sessions ----------------------------------------------------------
