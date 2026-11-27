@@ -127,7 +127,7 @@ class TestStartingTheBlog:
         assert out.getvalue().count(shown) == 1 and len(shown) >= 24
         assert verify_password(shown, read_hash(password_file(settings.data_dir)))
         assert shown.encode() not in on_disk(settings.data_dir)
-        assert "only a hash is stored" in out.getvalue() and entry._SET_PASSWORD in out.getvalue()
+        assert "only a hash is stored" in out.getvalue() and entry._SET_COMMAND in out.getvalue()
         assert len(self.launched) == 1
 
     @pytest.mark.unit
@@ -136,7 +136,7 @@ class TestStartingTheBlog:
         shown = io.StringIO()
         assert entry.run(settings, interactive=True, out=shown) == 0
         assert "password:" not in shown.getvalue().replace("the password from", "")
-        assert "Forgotten the password?" in shown.getvalue() and entry._SET_PASSWORD in shown.getvalue()
+        assert "Forgotten the password?" in shown.getvalue() and entry._SET_COMMAND in shown.getvalue()
 
     @pytest.mark.unit
     def test_without_a_terminal_and_without_a_password_it_refuses_to_start(self, settings):

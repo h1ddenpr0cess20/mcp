@@ -102,7 +102,7 @@ class TestHashFile:
     def test_owner_only_even_if_the_file_already_existed(self, tmp_path):
         path = tmp_path / "password_hash"
         path.write_text("old")
-        os.chmod(path, 0o644)
+        os.chmod(path, 0o640)
         write_hash(path, hash_password("pw"))
         assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 

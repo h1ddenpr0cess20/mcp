@@ -23,7 +23,7 @@ from blog_app.app import MissingPassword
 load_dotenv()
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
-_SET_PASSWORD = "python blog_mcp/blog/blog.py set-password"
+_SET_COMMAND = "python blog_mcp/blog/blog.py set-password"
 
 
 def startup_lines(settings: Settings, blog, generated: str | None = None) -> list[str]:
@@ -41,12 +41,12 @@ def startup_lines(settings: Settings, blog, generated: str | None = None) -> lis
             f"[blog]     username: {settings.username}",
             f"[blog]     password: {generated}",
             f"[blog] Write it down now: only a hash is stored (in {blog.password_source}), so it cannot be shown again.",
-            f"[blog] To choose a different password later, run: {_SET_PASSWORD}",
+            f"[blog] To choose a different password later, run: {_SET_COMMAND}",
         ]
     elif blog.password_source.startswith("BLOG_PASSWORD"):
         lines.append(f"[blog] Log in as '{settings.username}' with the password from {blog.password_source}.")
     else:
-        lines.append(f"[blog] Log in as '{settings.username}'. Forgotten the password? Set a new one with: {_SET_PASSWORD}")
+        lines.append(f"[blog] Log in as '{settings.username}'. Forgotten the password? Set a new one with: {_SET_COMMAND}")
     if blog.removed_plaintext_password:
         lines.append(
             "[blog] An earlier version stored your password as plain text. It is now stored as a hash, and the plain-text file was deleted."
@@ -66,8 +66,8 @@ def startup_lines(settings: Settings, blog, generated: str | None = None) -> lis
 def _ask_new_password(ask, out) -> str | None:
     """Prompt twice for a new password. Returns None (after saying why) if it is unusable."""
     first = ask("New password: ")
-    if len(first) < passwords.MIN_PASSWORD_LENGTH:
-        out.write(f"[blog] That is too short. Use at least {passwords.MIN_PASSWORD_LENGTH} characters; longer is better.\n")
+    if len(first) < passwords.MIN_LENGTH:
+        out.write(f"[blog] That is too short. Use at least {passwords.MIN_LENGTH} characters; longer is better.\n")
         return None
     if ask("Repeat it: ") != first:
         out.write("[blog] The two entries did not match. Nothing was changed.\n")
@@ -114,7 +114,7 @@ def run(settings: Settings, interactive: bool, out=None) -> int:
     except MissingPassword:
         if not interactive:
             out.write("[blog] No login password is set up yet, and this is not an interactive terminal, so none can be shown to you.\n")
-            out.write(f"[blog] Run this once in a terminal, then start the blog again: {_SET_PASSWORD}\n")
+            out.write(f"[blog] Run this once in a terminal, then start the blog again: {_SET_COMMAND}\n")
             return 2
         generated = passwords.generate_password()
         passwords.write_hash(passwords.password_file(settings.data_dir), passwords.hash_password(generated))

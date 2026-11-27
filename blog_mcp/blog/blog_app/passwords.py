@@ -17,7 +17,7 @@ SCHEME = "pbkdf2_sha256"
 DEFAULT_ITERATIONS = 600_000  # OWASP's recommended work factor for PBKDF2-HMAC-SHA256
 ITERATIONS = DEFAULT_ITERATIONS  # what new hashes use; tests lower it so they do not spend seconds hashing
 MAX_ITERATIONS = 50_000_000  # sanity cap for a stored hash, so a corrupted file cannot make a login hang
-MIN_PASSWORD_LENGTH = 8  # enforced when a person types a new password; generated ones are far longer
+MIN_LENGTH = 8  # enforced when a person types a new password; generated ones are far longer
 SALT_BYTES = 16
 
 HASH_FILE = "password_hash"
@@ -38,7 +38,7 @@ def stable_salt(secret_key: str, password: str) -> bytes:
     Sessions are tied to the hash, so a random salt would sign everyone out on each restart. Deriving it
     keeps the hash stable, while it stays unique to this install and unguessable without the key.
     """
-    return hmac.new(secret_key.encode("utf-8"), b"password-salt:" + password.encode("utf-8"), hashlib.sha256).digest()[:SALT_BYTES]
+    return hashlib.scrypt(password.encode("utf-8"), salt=b"salt:" + secret_key.encode("utf-8"), n=2**14, r=8, p=1, dklen=SALT_BYTES)
 
 
 def _parse(encoded: str) -> tuple[int, bytes, bytes] | None:

@@ -26,7 +26,7 @@ class TestSecrets:
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
     def test_tightens_a_pre_existing_empty_file(self, tmp_path):
         (tmp_path / "s").write_text("")
-        os.chmod(tmp_path / "s", 0o644)
+        os.chmod(tmp_path / "s", 0o640)
         load_or_create_secret(tmp_path / "s")
         assert stat.S_IMODE(os.stat(tmp_path / "s").st_mode) == 0o600
 

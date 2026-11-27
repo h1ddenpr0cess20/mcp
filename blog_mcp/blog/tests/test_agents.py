@@ -276,7 +276,7 @@ class TestPageMetadata:
     @pytest.mark.integration
     def test_only_the_structured_data_block_is_an_inline_script_and_the_policy_still_forbids_inline_script(self, pub):
         response = pub.browser().get("/post/first-post")
-        inline = re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", response.text)
+        inline = re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", response.text, re.IGNORECASE)
         assert inline == [' type="application/ld+json"']
         policy = response.headers["content-security-policy"]
         assert "script-src 'self'" in policy and "unsafe-inline" not in policy
