@@ -55,13 +55,13 @@ python -m venv .venv
 ### Step 3 — Install dependencies
 
 ```bash
-pip install -r blog/requirements.txt
+pip install -r blog_mcp/blog/requirements.txt
 ```
 
 ### Step 4 — Configure (optional)
 
 ```bash
-cp blog/.env.example blog/.env
+cp blog_mcp/blog/.env.example blog_mcp/blog/.env
 # Edit .env to set the title, port, or password
 ```
 
@@ -70,7 +70,7 @@ cp blog/.env.example blog/.env
 ## Running the Blog
 
 ```bash
-python blog/blog.py
+python blog_mcp/blog/blog.py
 ```
 
 It prints where it is running and where the login details are kept:
@@ -195,7 +195,7 @@ After=network.target
 
 [Service]
 User=you
-WorkingDirectory=/home/you/mcp/blog
+WorkingDirectory=/home/you/mcp/blog_mcp/blog
 ExecStart=/home/you/mcp/.venv/bin/python blog.py
 Restart=on-failure
 
@@ -207,7 +207,7 @@ WantedBy=multi-user.target
 sudo systemctl enable --now blog
 ```
 
-Settings come from `blog/.env` (read from the folder the blog starts in) or the unit's `Environment=` lines.
+Settings come from `blog_mcp/blog/.env` (read from the folder the blog starts in) or the unit's `Environment=` lines.
 
 ---
 
@@ -226,4 +226,4 @@ To restore, stop the blog and put `blog.db` and `media/` back.
 
 ## Connecting the MCP Server
 
-The [`blog_mcp`](../../blog_mcp/README.md) server manages posts through the API. It needs the blog's address and API token, which it finds by itself when both run on the same computer with the default `BLOG_DIR`. See that package's documentation for other setups.
+The [`blog_mcp`](../../README.md) server manages posts through the API. It needs the blog's address and API token, which it finds by itself when both run on the same computer with the default `BLOG_DIR`. See that package's documentation for other setups.

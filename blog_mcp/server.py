@@ -9,7 +9,7 @@ from blog_client import BlogClient, BlogUnreachable
 load_dotenv()
 
 # This server only manages posts, by calling the blog's JSON API. The blog is a separate
-# program (blog/blog.py); it hosts the website and keeps working when this server is off.
+# program (blog_mcp/blog/blog.py); it hosts the website and keeps working when this server is off.
 _client = BlogClient()
 
 if urlsplit(_client.base_url).scheme == "http" and urlsplit(_client.base_url).hostname not in ("127.0.0.1", "localhost", "::1"):
@@ -203,7 +203,7 @@ def get_blog_info() -> dict:
     """Check the blog: its title, address, whether it is running, and post counts.
 
     The blog is a separate program. If blog_running is false, it needs to be started
-    (python blog/blog.py) before post urls will open.
+    (python blog_mcp/blog/blog.py) before post urls will open.
 
     Returns:
         Dict with blog_url, blog_running, and, when it is running, title, description,

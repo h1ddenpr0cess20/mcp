@@ -252,7 +252,7 @@ class TestErrors:
     @pytest.mark.unit
     def test_connection_failure_says_how_to_start_the_blog(self, make_client):
         client, _ = make_client(lambda m, u, k: requests.exceptions.ConnectionError("Connection refused"))
-        with pytest.raises(BlogUnreachable, match=r"python blog/blog\.py"):
+        with pytest.raises(BlogUnreachable, match=r"python blog_mcp/blog/blog\.py"):
             client.info()
 
     @pytest.mark.unit

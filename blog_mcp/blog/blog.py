@@ -1,7 +1,7 @@
 """Run the blog.
 
 This is the program that hosts the blog. It needs nothing else running; the MCP
-server in ../blog_mcp is a separate program that manages posts through this
+server one folder up (server.py) is a separate program that manages posts through this
 blog's JSON API.
 """
 

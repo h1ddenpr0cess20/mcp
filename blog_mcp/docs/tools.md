@@ -291,7 +291,7 @@ A problem makes the tool call fail with a short message the model can act on:
 
 | Situation | Message |
 |-----------|---------|
-| Blog not running | `Cannot reach the blog at http://127.0.0.1:9901. Is it running? Start it with python blog/blog.py, or fix BLOG_URL.` |
+| Blog not running | `Cannot reach the blog at http://127.0.0.1:9901. Is it running? Start it with python blog_mcp/blog/blog.py, or fix BLOG_URL.` |
 | Wrong token | `The blog rejected the API token. Check BLOG_API_TOKEN against the blog's api_token.` |
 | Unknown slug | `Post 'x' not found` |
 | Blank title | `title must not be empty` |

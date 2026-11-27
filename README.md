@@ -77,24 +77,22 @@ FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any
 
 **Requirements**: OpenAI-compatible endpoint with Responses API support (e.g. LM Studio)
 
-### Blog (`blog/`)
-A private blog you run yourself. It is a standalone web application, not an MCP server: start it and it works on its own.
+### Blog MCP (`blog_mcp/`)
+A private blog you run yourself, plus a FastMCP server that lets an AI assistant manage it. The two are separate programs in this folder: the blog (`blog_mcp/blog/`) is a standalone web application that works on its own, and the MCP server (`server.py`) manages it through the blog's JSON API.
+
+The blog:
 - Write in Markdown in the browser, with a live preview, drafts, publishing, tags, and image upload
 - Dashboard for managing posts; editing conflicts with other editors are caught instead of overwritten
 - Login page and sessions; private by default, with an option to make published posts public
-- A JSON API (bearer token) that tools such as `blog_mcp` use
 - Posts live in a local SQLite file; no external services
 
-**Requirements**: Nothing beyond Python; the login password is generated on first run
-
-### Blog MCP (`blog_mcp/`)
-FastMCP server that lets an AI assistant manage the blog above through its JSON API. It keeps no data of its own, and the blog keeps working when it is off.
-- Create, edit, publish, unpublish, search, and delete posts
-- Find-and-replace edits so small changes don't resend a whole post
+The MCP server:
+- Create, edit, publish, unpublish, search, and delete posts; find-and-replace edits so small changes don't resend a whole post
 - Upload images from your computer and get Markdown for them
 - Reports whether the blog is running, and says how to start it when it isn't
+- Keeps no data of its own, and the blog keeps working when it is off
 
-**Requirements**: A running blog (`python blog/blog.py`); it finds the API token itself when both are on the same computer
+**Requirements**: Nothing beyond Python; the blog generates its login password on first run, and the MCP server finds the blog's API token itself when both are on the same computer
 
 ### Colab Shell MCP (`colab_shell_mcp/`)
 Shell execution and file operations inside a Google Colab runtime, with the same

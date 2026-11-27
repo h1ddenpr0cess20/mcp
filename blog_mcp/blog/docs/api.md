@@ -1,6 +1,6 @@
 # API Reference
 
-The blog's JSON API, under `/api/v1`. It does everything the editor does, so scripts and the [`blog_mcp`](../../blog_mcp/README.md) server can manage posts.
+The blog's JSON API, under `/api/v1`. It does everything the editor does, so scripts and the [`blog_mcp`](../../README.md) server can manage posts.
 
 ---
 

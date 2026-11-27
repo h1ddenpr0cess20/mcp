@@ -1,6 +1,6 @@
 """The MCP server against the real blog application, over real HTTP.
 
-Needs the blog application next to this package and its dependencies (see ../blog/requirements.txt);
+Needs the blog application (the `blog` folder inside this package) and its dependencies (see ../blog/requirements.txt);
 skipped when either is missing. FastMCP already pulls in most of those dependencies, so these usually run.
 """
 
@@ -18,9 +18,9 @@ import pytest
 
 pytest.importorskip("markdown_it")
 pytest.importorskip("multipart")
-BLOG_DIR = Path(__file__).resolve().parents[2] / "blog"
+BLOG_DIR = Path(__file__).resolve().parents[1] / "blog"
 if not (BLOG_DIR / "blog_app").is_dir():
-    pytest.skip("the blog application is not next to this package", allow_module_level=True)
+    pytest.skip("the blog application is not inside this package", allow_module_level=True)
 sys.path.insert(0, str(BLOG_DIR))
 
 import uvicorn  # noqa: E402
@@ -159,5 +159,5 @@ class TestMcpServerWithTheRealBlog:
         call(mcp_server, "create_post", title="Survivor", body="still here", publish=True)
         mcp_server._client.base_url = "http://127.0.0.1:1"  # the blog 'goes down' from the server's point of view
         info = call(mcp_server, "get_blog_info").data
-        assert info["blog_running"] is False and "python blog/blog.py" in info["message"]
+        assert info["blog_running"] is False and "python blog_mcp/blog/blog.py" in info["message"]
         assert "still here" in blog.get("/post/survivor")[1]

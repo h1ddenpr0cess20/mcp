@@ -1,13 +1,13 @@
 # Blog
 
-A private blog you run yourself. Write in Markdown in your browser, keep drafts, attach images, and read it all behind a login. It is a standalone web application: start it and it works, with nothing else running. The [`blog_mcp`](../blog_mcp/README.md) server in this repo is a separate program that lets an AI assistant manage the same posts through the blog's API; the blog never depends on it.
+A private blog you run yourself. Write in Markdown in your browser, keep drafts, attach images, and read it all behind a login. It is a standalone web application: start it and it works, with nothing else running. The MCP server one folder up ([`blog_mcp`](../README.md)) is a separate program that lets an AI assistant manage the same posts through the blog's API; the blog never depends on it.
 
 ## Quickstart
 
 ```bash
 # From the repo root (mcp/)
-pip install -r blog/requirements.txt
-python blog/blog.py
+pip install -r blog_mcp/blog/requirements.txt
+python blog_mcp/blog/blog.py
 ```
 
 Open `http://127.0.0.1:9901` and log in as `owner`. On first start the blog generates a password and keeps it in `~/mcp-blog/blog_password`:
@@ -16,7 +16,7 @@ Open `http://127.0.0.1:9901` and log in as `owner`. On first start the blog gene
 cat ~/mcp-blog/blog_password
 ```
 
-Then click **New post**. To choose your own password, title, or port, copy `blog/.env.example` to `blog/.env` and edit it.
+Then click **New post**. To choose your own password, title, or port, copy `blog_mcp/blog/.env.example` to `blog_mcp/blog/.env` and edit it.
 
 ## What You Get
 

@@ -1,19 +1,26 @@
 # Blog MCP Server (FastMCP)
 
-FastMCP server that lets an AI assistant manage a [blog](../blog/README.md): write, edit, publish, search, and delete posts, and upload images. The blog is a separate program with its own website and editor. This server only talks to it through its JSON API, so the blog works fine with this server off, and you can keep editing in the browser while an assistant edits too.
+FastMCP server that lets an AI assistant manage a [blog](blog/README.md): write, edit, publish, search, and delete posts, and upload images. The blog is a separate program with its own website and editor. This server only talks to it through its JSON API, so the blog works fine with this server off, and you can keep editing in the browser while an assistant edits too.
 
 ## Quickstart
 
 ```bash
 # From the repo root (mcp/)
-pip install -r blog/requirements.txt
-python blog/blog.py                      # the blog; leave it running
+pip install -r blog_mcp/blog/requirements.txt
+python blog_mcp/blog/blog.py           # the blog; leave it running
 
 pip install -r blog_mcp/requirements.txt
 python blog_mcp/server.py                # the MCP server
 ```
 
 The MCP server runs on HTTP transport at `127.0.0.1:9900` by default. When the blog runs on the same computer with default settings, the server finds the blog's API token by itself; otherwise set `BLOG_URL` and `BLOG_API_TOKEN` (see [Configuration](#configuration)).
+
+## Layout
+
+Two separate programs live in this folder:
+
+- `blog/` — the blog itself: a standalone web application with its own README, requirements, and tests. Run it with `python blog_mcp/blog/blog.py`.
+- `server.py` and `blog_client/` — this MCP server, which manages the blog through its JSON API.
 
 ## Tools
 
@@ -37,7 +44,7 @@ The MCP server runs on HTTP transport at `127.0.0.1:9900` by default. When the b
 
 ## Configuration
 
-Copy `.env.example` to `.env` and edit as needed.
+Copy `.env.example` to `.env` and edit as needed. The blog reads `blog_mcp/blog/.env`, and falls back to this folder's `.env` if it has none, so a single `.env` here can configure both programs (they share `BLOG_DIR` and `BLOG_API_TOKEN`).
 
 | Variable | Default | Description |
 |---|---|---|

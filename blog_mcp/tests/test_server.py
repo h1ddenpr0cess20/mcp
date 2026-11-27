@@ -227,7 +227,7 @@ class TestErrors:
     @pytest.mark.integration
     def test_a_down_blog_tells_you_how_to_start_it(self, srv, blog):
         blog.reply = lambda m, u, k: requests.exceptions.ConnectionError("refused")
-        assert "python blog/blog.py" in failure(srv, "create_post", title="x")
+        assert "python blog_mcp/blog/blog.py" in failure(srv, "create_post", title="x")
 
 
 class TestBlogInfo:
@@ -245,7 +245,7 @@ class TestBlogInfo:
         blog.reply = lambda m, u, k: requests.exceptions.ConnectionError("refused")
         info = ok(srv, "get_blog_info")
         assert info["blog_running"] is False and info["blog_url"] == "http://blog.test"
-        assert "python blog/blog.py" in info["message"]
+        assert "python blog_mcp/blog/blog.py" in info["message"]
 
     @pytest.mark.integration
     def test_a_wrong_token_is_still_an_error(self, srv, blog):

@@ -19,7 +19,7 @@ How to install, run, and connect the Blog MCP server to an MCP client.
 ## Requirements
 
 - Python 3.10 or later
-- A running [blog](../../blog/README.md) (this server manages it; it does not host anything itself)
+- A running [blog](../blog/README.md) (this server manages it; it does not host anything itself)
 
 ---
 
@@ -64,7 +64,7 @@ cp blog_mcp/.env.example blog_mcp/.env
 
 ## Running the Server
 
-Start the blog first (`python blog/blog.py`), then:
+Start the blog first (`python blog_mcp/blog/blog.py`), then:
 
 ```bash
 python blog_mcp/server.py

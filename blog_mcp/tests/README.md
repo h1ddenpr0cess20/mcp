@@ -45,7 +45,7 @@ pip install -r requirements.txt
 pip install -e ".[test]"
 ```
 
-The integration tests need the blog application next to this package and its dependencies (`pip install -r ../blog/requirements.txt`). FastMCP already installs most of them, so they usually run; if anything is missing that file is skipped and everything else still runs.
+The integration tests need the blog application (the `blog` folder in this package) and its dependencies (`pip install -r blog/requirements.txt`). FastMCP already installs most of them, so they usually run; if anything is missing that file is skipped and everything else still runs.
 
 ### Basic Test Execution
 

@@ -135,7 +135,7 @@ unpublish_post("notes-on-sourdough")   # back to draft; still there for you in t
 delete_post("notes-on-sourdough")      # gone for good
 ```
 
-`delete_post` cannot be undone. Back up the blog first if you might want it back (see the blog's [backup notes](../../blog/docs/configuration.md#backups)).
+`delete_post` cannot be undone. Back up the blog first if you might want it back (see the blog's [backup notes](../blog/docs/configuration.md#backups)).
 
 ---
 

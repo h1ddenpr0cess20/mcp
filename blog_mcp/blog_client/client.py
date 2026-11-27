@@ -77,7 +77,7 @@ class BlogClient:
             raise BlogUnreachable(f"The blog at {self.base_url} did not answer within {self.timeout:g} seconds.") from None
         except requests.exceptions.RequestException:
             raise BlogUnreachable(
-                f"Cannot reach the blog at {self.base_url}. Is it running? Start it with `python blog/blog.py`, "
+                f"Cannot reach the blog at {self.base_url}. Is it running? Start it with `python blog_mcp/blog/blog.py`, "
                 "or fix BLOG_URL."
             ) from None
         if 300 <= response.status_code < 400:
