@@ -818,7 +818,7 @@ class TestThePasswordNeverLeaks:
         payload = browser.cookies["blog_session"].split(".")[0]
         decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
         assert PASSWORD not in decoded and "pbkdf2" not in decoded
-        assert set(json.loads(decoded)) == {"u", "csrf", "exp", "v"}
+        assert set(json.loads(decoded)) == {"u", "sid", "csrf", "exp", "v"}
 
     @pytest.mark.integration
     def test_a_failed_login_page_never_echoes_what_was_typed_as_the_password(self, site):
