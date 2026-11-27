@@ -19,7 +19,10 @@ ATOM = "http://www.w3.org/2005/Atom"
 SITEMAP = "http://www.sitemaps.org/schemas/sitemap/0.9"
 
 _RELATIVE_LINK = re.compile(r"\]\(/(?!/)")
-_XML_FORBIDDEN = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+# Characters XML 1.0 cannot carry: most C0 control characters and the two noncharacters U+FFFE/U+FFFF.
+_XML_FORBIDDEN = re.compile(
+    "[" + "".join(re.escape(chr(c)) for c in (*range(0x00, 0x09), 0x0B, 0x0C, *range(0x0E, 0x20), 0xFFFE, 0xFFFF)) + "]"
+)
 
 
 def one_line(text: str) -> str:

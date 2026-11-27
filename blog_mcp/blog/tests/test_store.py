@@ -517,9 +517,9 @@ class TestStorage:
     def test_existing_directory_permissions_are_not_changed(self, tmp_path):
         shared = tmp_path / "shared"
         shared.mkdir()
-        os.chmod(shared, 0o750)
+        os.chmod(shared, 0o710)
         BlogStore(data_dir=str(shared))
-        assert stat.S_IMODE(os.stat(shared).st_mode) == 0o750
+        assert stat.S_IMODE(os.stat(shared).st_mode) == 0o710
 
 
 class TestVersioningAndConflicts:
