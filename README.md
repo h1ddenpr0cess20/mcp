@@ -77,6 +77,16 @@ FastMCP server for delegating tasks to local LLM sub-agents via LM Studio or any
 
 **Requirements**: OpenAI-compatible endpoint with Responses API support (e.g. LM Studio)
 
+### Blog MCP (`blog_mcp/`)
+FastMCP server for running a private, password-protected blog. An assistant writes and manages Markdown posts through MCP tools; you read them on a built-in web viewer. No API key required.
+- Create, edit, publish, unpublish, and delete posts; drafts by default
+- Find-and-replace edits so small changes don't resend a whole post
+- Tags, search across titles, bodies, and tags with match snippets, and paging
+- Built-in viewer on `127.0.0.1` behind HTTP Basic auth (generated password), optional HTTPS, no scripts, `noindex`
+- Posts stored in a local SQLite file with owner-only permissions
+
+**Requirements**: Nothing beyond Python; the viewer password is generated on first run
+
 ### Colab Shell MCP (`colab_shell_mcp/`)
 Shell execution and file operations inside a Google Colab runtime, with the same
 tool surface as `shell_mcp`/`docker_shell_mcp`/`webshell_mcp` but backed by

@@ -17,6 +17,7 @@ updates:
   - package-ecosystem: pip
     directories:
       - /android_mcp
+      - /blog_mcp
       - /colab_shell_mcp
       - /docker_shell_mcp
       - /firetv_mcp
