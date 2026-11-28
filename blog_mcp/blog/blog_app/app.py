@@ -1,0 +1,1039 @@
+"""The blog application: reading pages, login, the admin editor, and the JSON API.
+
+Build it with ``create_app(Settings.from_env())`` and serve it with any ASGI
+server (blog.py uses uvicorn). It stands alone: nothing else needs to run.
+"""
+
+import asyncio
+import hashlib
+from dataclasses import replace
+from math import ceil
+from pathlib import Path
+from urllib.parse import quote
+
+from starlette.applications import Starlette
+from starlette.datastructures import MutableHeaders
+from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.requests import Request
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
+
+from . import discovery, media, pages, passwords
+from .attachments import AttachmentFiles, clean_filename, guess_content_type
+from .auth import SESSION_COOKIE, SESSION_SECONDS, Auth, LoginThrottle
+from .config import Settings, load_or_create_secret
+from .render import render_markdown
+from .store import MAX_BODY_CHARS, BlogError, BlogStore, Conflict, NotFound, TooLarge
+
+PAGE_SIZE = 10
+ADMIN_PAGE_SIZE = 25
+FORM_REQUEST_BYTES = 6 * 1024 * 1024  # a 1,000,000-character post is at most 4 MB of UTF-8, plus form overhead
+IMAGE_REQUEST_BYTES = media.MAX_IMAGE_BYTES + 1024 * 1024
+MAX_PREVIEW_API_BYTES = 1024 * 1024
+STATIC_DIR = Path(__file__).parent / "static"
+
+CONTENT_SECURITY_POLICY = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src 'self'; "
+    "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+)
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+NOTICES = {
+    "created": "Draft saved.",
+    "saved": "Saved.",
+    "published": "Published.",
+    "unpublished": "Moved back to drafts.",
+    "deleted": "Post deleted.",
+    "attached": "File attached.",
+    "detached": "File removed from the post.",
+}
+
+
+class SecurityHeaders:
+    """Adds the security and caching headers to every response."""
+
+    def __init__(self, app, indexable: bool):
+        self.app = app
+        self.indexable = indexable
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        static = scope["path"].startswith("/static/")
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    headers.setdefault(name, value)
+                if scope.get("scheme") == "https":
+                    headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+                if not self.indexable:
+                    headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
+                headers.setdefault("Cache-Control", "public, max-age=3600" if static else "private, no-store")
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+class BodyLimit:
+    """Rejects any request body over the limit for its path, whether or not it declares a length.
+
+    `limit_for(path)` returns the largest body (in bytes) a path accepts, so ordinary pages stay small
+    while the routes that take file uploads allow a file.
+    """
+
+    def __init__(self, app, limit_for):
+        self.app = app
+        self.limit_for = limit_for
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        limit = self.limit_for(scope["path"])
+        declared = dict(scope["headers"]).get(b"content-length")
+        if declared is not None and (not declared.isdigit() or int(declared) > limit):
+            await PlainTextResponse("Request body too large", status_code=413)(scope, receive, send)
+            return
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise HTTPException(status_code=413, detail="Request body too large")
+            return message
+
+        await self.app(scope, limited_receive, send)
+
+
+def safe_next(value: str | None, default: str = "/admin") -> str:
+    """Only allow a same-site path as a post-login destination (never an absolute or protocol-relative URL)."""
+    if value and value.startswith("/") and not value.startswith("//") and "\\" not in value and value.isprintable():
+        return value
+    return default
+
+
+def _field(form, name: str) -> str:
+    value = form.get(name, "")
+    return value if isinstance(value, str) else ""
+
+
+def _page_number(request: Request) -> int:
+    try:
+        return min(max(1, int(request.query_params.get("page", "1"))), 1_000_000)
+    except ValueError:
+        return 1
+
+
+class MissingPassword(RuntimeError):
+    """No login password has been set up yet (see `blog.py set-password`)."""
+
+
+class BlogApp:
+    """Holds the blog's state and implements its request handlers."""
+
+    login_delay = 0.5  # seconds to stall a failed login, on top of the lockout
+
+    def __init__(self, settings: Settings):
+        self.settings = replace(settings, password="")  # the plaintext is hashed below and not kept
+        self.store = BlogStore(settings.data_dir)
+        data_dir = self.store.data_dir
+        self.password_file = passwords.password_file(data_dir)
+        self.api_token_file = data_dir / "api_token"
+        self.removed_plaintext_password = False  # True if this start found and removed an old plaintext password file
+        secret_key = load_or_create_secret(data_dir / "secret_key", 32)
+        self.password_hash, self.password_source = self._resolve_password(settings, secret_key)
+        self.api_token = settings.api_token or load_or_create_secret(self.api_token_file, 32)
+        self.api_token_source = "BLOG_API_TOKEN" if settings.api_token else str(self.api_token_file)
+        self.auth = Auth(settings.username, self.password_hash, secret_key, self.api_token)
+        self.throttle = LoginThrottle()
+        self.media_dir = data_dir / "media"
+        self.attachments = AttachmentFiles(data_dir / "attachments", settings.max_attachment_bytes)
+        self.site = {"title": settings.title, "description": settings.description}
+
+    def _resolve_password(self, settings: Settings, secret_key: str) -> tuple[str, str]:
+        """The stored password hash and where it came from. Only a hash is ever kept, in memory or on disk."""
+        self.removed_plaintext_password = passwords.migrate_legacy_password(self.store.data_dir)
+        if settings.password_hash:
+            if not passwords.is_valid_hash(settings.password_hash):
+                raise ValueError(
+                    "BLOG_PASSWORD_HASH is not a valid password hash. Make one with: python blog_mcp/blog/blog.py hash-password"
+                )
+            return settings.password_hash.strip(), "BLOG_PASSWORD_HASH"
+        if settings.password:
+            return passwords.hash_password(settings.password, salt=passwords.stable_salt(secret_key, settings.password)), "BLOG_PASSWORD"
+        stored = passwords.read_hash(self.password_file)
+        if stored is None:
+            raise MissingPassword("No password is set up yet. Run: python blog_mcp/blog/blog.py set-password")
+        if not passwords.is_valid_hash(stored):
+            raise ValueError(
+                f"{self.password_file} is not a valid password hash. Set a new one with: python blog_mcp/blog/blog.py set-password"
+            )
+        return stored, str(self.password_file)
+
+    # --- request helpers ---------------------------------------------------
+
+    def session(self, request: Request) -> dict | None:
+        if not hasattr(request.state, "session"):
+            session = self.auth.read_session(request.cookies.get(SESSION_COOKIE))
+            if session is not None and not self.store.has_login_session(session["sid"]):
+                session = None
+            request.state.session = session
+        return request.state.session
+
+    def ctx(self, request: Request) -> dict:
+        session = self.session(request)
+        return {
+            "site": self.site,
+            "user": session["u"] if session else None,
+            "csrf": session["csrf"] if session else None,
+            "indexable": self.settings.public,
+            "public": self.settings.public,
+            "base": self.public_base(request),
+        }
+
+    def not_found(self, request: Request, message: str = "That page does not exist.") -> HTMLResponse:
+        return HTMLResponse(pages.not_found_page(self.ctx(request), message), 404)
+
+    def to_login(self, request: Request) -> RedirectResponse:
+        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"/login?next={quote(target, safe='/')}", status_code=303)
+
+    def can_read(self, request: Request) -> bool:
+        """Published posts are readable by anyone in public mode, otherwise only when logged in."""
+        return self.settings.public or self.session(request) is not None
+
+    def admin_session(self, request: Request) -> dict | Response:
+        """The logged-in session, or the response that sends the visitor to log in."""
+        session = self.session(request)
+        if session is None:
+            if request.url.path in ("/admin/preview", "/admin/upload") or self.wants_json(request):
+                return JSONResponse({"error": "You are logged out. Reload the page and log in again."}, status_code=401)
+            return self.to_login(request)
+        return session
+
+    @staticmethod
+    def wants_json(request: Request) -> bool:
+        return "application/json" in request.headers.get("accept", "")
+
+    def csrf_failed(self, request: Request) -> HTMLResponse:
+        return HTMLResponse(pages.message_page(self.ctx(request), "Session expired",
+                                                     "That form is no longer valid. Go back, reload the page, and try again."), 403)
+
+    def public_base(self, request: Request) -> str:
+        return self.settings.public_url or str(request.base_url).rstrip("/")
+
+    # --- reading pages -----------------------------------------------------
+
+    def login_or_401(self, request: Request) -> Response:
+        """Send a person to the login page, but tell an agent asking for Markdown plainly that the blog is private."""
+        return self.machine_gate(request) if self.wants_markdown(request) else self.to_login(request)
+
+    async def home(self, request: Request) -> Response:
+        if not self.can_read(request):
+            return self.login_or_401(request)
+        if self.wants_markdown(request):
+            return await self.llms_txt(request)
+        page = _page_number(request)
+        listing = self.store.list_posts(status="published", limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE)
+        head = discovery.home_head(self.site, self.public_base(request)) if self.settings.public else ""
+        return HTMLResponse(pages.post_list(self.ctx(request), "Posts", listing, "/", page, PAGE_SIZE,
+                                            "No posts have been published yet.", head=head), headers={"Vary": "Accept"})
+
+    async def post(self, request: Request) -> Response:
+        slug = request.path_params["slug"]
+        as_markdown = slug.endswith(".md") or self.wants_markdown(request)  # slugs never contain a dot
+        slug = slug.removesuffix(".md")
+        if not self.can_read(request):
+            return self.machine_gate(request) if as_markdown else self.to_login(request)
+        try:
+            post = self.store.get_post(slug)
+        except NotFound:
+            post = None
+        if post is None or (post["status"] == "draft" and self.session(request) is None):
+            if as_markdown:
+                return PlainTextResponse("There is no post with that address.\n", status_code=404)
+            return self.not_found(request, "There is no post with that address.")
+        base = self.public_base(request)
+        if as_markdown:
+            return self.machine_response(request, discovery.post_markdown(post, base), "text/markdown; charset=utf-8", vary_accept=True)
+        public = self.settings.public and post["status"] == "published"
+        headers = {"Vary": "Accept"}
+        if public:
+            headers["Link"] = f'<{discovery.post_url(base, post["slug"])}.md>; rel="alternate"; type="text/markdown"'
+        head = discovery.post_head(post, self.site, base) if public else ""
+        return HTMLResponse(pages.post_page(self.ctx(request), post, render_markdown(post["body"]), head=head), headers=headers)
+
+    async def tag(self, request: Request) -> Response:
+        if not self.can_read(request):
+            return self.to_login(request)
+        name = request.path_params["tag"]
+        page = _page_number(request)
+        listing = self.store.list_posts(status="published", tag=name, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE)
+        return HTMLResponse(pages.post_list(self.ctx(request), f"Tagged #{name}", listing, f"/tag/{quote(name, safe='')}",
+                                                  page, PAGE_SIZE, "No published posts have this tag."))
+
+    async def tags(self, request: Request) -> Response:
+        if not self.can_read(request):
+            return self.to_login(request)
+        return HTMLResponse(pages.tags_page(self.ctx(request), self.store.list_tags(status="published")["tags"]))
+
+    async def search(self, request: Request) -> Response:
+        if not self.can_read(request):
+            return self.login_or_401(request)
+        text = request.query_params.get("q", "").strip()[:200]
+        if not text:
+            return HTMLResponse(pages.search_page(self.ctx(request), "", None))
+        status = "all" if self.session(request) else "published"
+        found = self.store.search_posts(text, status=status, limit=50)["posts"]
+        if self.wants_markdown(request):
+            return self.machine_response(request, discovery.search_markdown(text, found, self.public_base(request)),
+                                         "text/markdown; charset=utf-8", vary_accept=True)
+        return HTMLResponse(pages.search_page(self.ctx(request), text, found), headers={"Vary": "Accept"})
+
+    async def media_file(self, request: Request) -> Response:
+        path = media.media_path(self.media_dir, request.path_params["name"]) if self.can_read(request) else None
+        if path is None:
+            return PlainTextResponse("Not found", status_code=404)
+        return FileResponse(path, media_type=media.MEDIA_TYPES[path.suffix[1:]], headers={
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, max-age=86400",
+        })
+
+    async def healthz(self, request: Request) -> Response:
+        return PlainTextResponse("ok")
+
+    async def robots(self, request: Request) -> Response:
+        if self.settings.public:
+            base = self.public_base(request)
+            return PlainTextResponse(
+                "# This blog is public. Readers, search engines, and AI agents are welcome.\n"
+                "# For agents: /llms.txt is an index, /llms-full.txt is every post, and any post is plain Markdown at /post/<slug>.md\n"
+                "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /login\nDisallow: /api\n"
+                f"Sitemap: {base}/sitemap.xml\n"
+            )
+        return PlainTextResponse("User-agent: *\nDisallow: /\n")
+
+    # --- attachments -------------------------------------------------------
+
+    async def attach(self, slug: str, upload) -> dict:
+        """Attach an uploaded file to a post, replacing a file of the same name. Returns the attachment's record."""
+        filename = clean_filename(getattr(upload, "filename", "") or "")
+        planned_id = self.store.plan_attachment(slug, filename)  # fails early for an unknown post or a full one
+        received = await self.attachments.receive(upload)
+        try:
+            record = self.store.save_attachment(slug, planned_id, filename, guess_content_type(filename), received.size,
+                                                received.sha256, received.is_text)
+            self.attachments.commit(received, record["id"])
+        except BaseException:
+            self.attachments.discard(received)
+            raise
+        return record
+
+    def remove_attachment(self, slug: str, attachment_id: str) -> bool:
+        removed = self.store.delete_attachment(slug, attachment_id)
+        if removed:
+            self.attachments.remove(attachment_id)
+        return removed
+
+    def delete_post(self, slug: str) -> bool:
+        """Delete a post and the files attached to it."""
+        try:
+            attachment_ids = [a["id"] for a in self.store.list_attachments(slug)]
+        except NotFound:
+            return False
+        deleted = self.store.delete_post(slug)
+        if deleted:
+            for attachment_id in attachment_ids:
+                self.attachments.remove(attachment_id)
+        return deleted
+
+    def visible_attachment(self, request: Request, attachment_id: str) -> dict | None:
+        """An attachment, if this visitor may see it: it follows the post. Drafts are for the owner only."""
+        try:
+            record = self.store.get_attachment(attachment_id)
+        except NotFound:
+            return None
+        if self.session(request) is not None:
+            return record
+        return record if record["post_status"] == "published" and self.settings.public else None
+
+    def attachment_unavailable(self, request: Request) -> Response:
+        """The same answer for 'does not exist' and 'not yours to see', so ids cannot be probed."""
+        if self.session(request) is None and not self.settings.public:
+            return self.to_login(request)
+        return self.not_found(request, "There is no file with that address.")
+
+    def download_response(self, record: dict) -> Response | None:
+        """The file as a download. Never served inline, and never as a type a browser would run or render."""
+        path = self.attachments.path(record["id"])
+        if not path.is_file():
+            return None
+        return FileResponse(path, media_type="application/octet-stream", filename=record["filename"],
+                            content_disposition_type="attachment",
+                            headers={"Content-Security-Policy": "default-src 'none'; sandbox"})
+
+    async def file_download(self, request: Request) -> Response:
+        record = self.visible_attachment(request, request.path_params["id"])
+        response = self.download_response(record) if record else None
+        return response or self.attachment_unavailable(request)
+
+    async def file_view(self, request: Request) -> Response:
+        record = self.visible_attachment(request, request.path_params["id"])
+        if record is None or not self.attachments.path(record["id"]).is_file():
+            return self.attachment_unavailable(request)
+        text, truncated = self.attachments.read_text(record["id"]) if record["is_text"] else (None, False)
+        return HTMLResponse(pages.attachment_page(self.ctx(request), record, text, truncated))
+
+    async def admin_attach(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        wants_json = self.wants_json(request)
+        form = await request.form(max_files=10, max_fields=4)
+        if not Auth.check_csrf(session, _field(form, "csrf") or request.headers.get("x-csrf-token")):
+            return JSONResponse({"error": "Invalid CSRF token"}, status_code=403) if wants_json else self.csrf_failed(request)
+        slug = request.path_params["slug"]
+        saved, error, failure_status = [], "", 400
+        try:
+            uploads = [upload for upload in form.getlist("file") if not isinstance(upload, str)]
+            if not uploads:
+                raise BlogError("Choose a file to attach")
+            for upload in uploads:
+                saved.append((await self.attach(slug, upload))["filename"])
+        except NotFound:
+            return JSONResponse({"error": "That post no longer exists"}, status_code=404) if wants_json else self.not_found(request)
+        except TooLarge as exc:
+            error, failure_status = str(exc), 413
+        except BlogError as exc:
+            error = str(exc)
+        if wants_json:
+            files = pages.attachment_editor_items(self.ctx(request), slug, self.store.list_attachments(slug))
+            return JSONResponse({"saved": saved, "error": error, "html": files}, status_code=failure_status if error and not saved else 200)
+        if error:
+            return self.edit_page(request, slug, error=error, status=failure_status)
+        return RedirectResponse(f"/admin/edit/{quote(slug, safe='')}?msg=attached", status_code=303)
+
+    async def admin_detach(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        form = await request.form()
+        if not Auth.check_csrf(session, _field(form, "csrf")):
+            return self.csrf_failed(request)
+        slug = request.path_params["slug"]
+        if not self.remove_attachment(slug, request.path_params["id"]):
+            return self.not_found(request, "That file is not attached to this post.")
+        return RedirectResponse(f"/admin/edit/{quote(slug, safe='')}?msg=detached", status_code=303)
+
+    # --- for agents and feed readers ---------------------------------------
+
+    @staticmethod
+    def wants_markdown(request: Request) -> bool:
+        """True when the client prefers Markdown to HTML, as an agent sending `Accept: text/markdown` does."""
+        accept = request.headers.get("accept", "")
+        markdown, html = accept.find("text/markdown"), accept.find("text/html")
+        return markdown != -1 and (html == -1 or markdown < html)
+
+    def machine_gate(self, request: Request) -> Response | None:
+        """None if the visitor may read, otherwise a plain 401: an agent cannot use a login page."""
+        if self.can_read(request):
+            return None
+        return PlainTextResponse("This blog is private. Log in at /login to read it.\n", status_code=401)
+
+    def machine_response(self, request: Request, body: str, media_type: str, vary_accept: bool = False) -> Response:
+        """A text response for machines. Anonymous reads of a public blog may be cached for five minutes and revalidated."""
+        headers = {"ETag": '"' + hashlib.sha256(body.encode("utf-8")).hexdigest()[:32] + '"'}
+        if vary_accept:
+            headers["Vary"] = "Accept"
+        if self.settings.public and self.session(request) is None:
+            headers["Cache-Control"] = "public, max-age=300"
+            if request.headers.get("if-none-match") == headers["ETag"]:
+                return Response(status_code=304, headers=headers)
+        return Response(body, media_type=media_type, headers=headers)
+
+    def published_posts(self, limit: int = discovery.MAX_LISTED) -> list[dict]:
+        """Summaries of published posts, newest first."""
+        posts: list[dict] = []
+        while len(posts) < limit:
+            batch = self.store.list_posts(status="published", limit=100, offset=len(posts))["posts"]
+            if not batch:
+                break
+            posts += batch
+        return posts[:limit]
+
+    def full_posts(self, summaries: list[dict]):
+        """Complete posts (with body and attachments) for the given summaries, one at a time."""
+        for summary in summaries:
+            try:
+                yield self.store.get_post(summary["slug"])
+            except NotFound:
+                continue  # deleted while this was being built
+
+    async def llms_txt(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        text = discovery.llms_txt(self.site, self.published_posts(), self.public_base(request))
+        return self.machine_response(request, text, "text/plain; charset=utf-8", vary_accept=True)
+
+    async def llms_full(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        text = discovery.llms_full_txt(self.site, self.full_posts(self.published_posts()), self.public_base(request))
+        return self.machine_response(request, text, "text/plain; charset=utf-8")
+
+    async def sitemap(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        return self.machine_response(request, discovery.sitemap_xml(self.published_posts(), self.public_base(request)),
+                                     "application/xml; charset=utf-8")
+
+    async def atom_feed(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        posts = list(self.full_posts(self.published_posts(discovery.FEED_ITEMS)))
+        return self.machine_response(request, discovery.atom_feed(self.site, posts, self.public_base(request), render_markdown),
+                                     "application/atom+xml; charset=utf-8")
+
+    async def json_feed(self, request: Request) -> Response:
+        if gate := self.machine_gate(request):
+            return gate
+        posts = list(self.full_posts(self.published_posts(discovery.FEED_ITEMS)))
+        return self.machine_response(request, discovery.json_feed(self.site, posts, self.public_base(request), render_markdown),
+                                     "application/feed+json; charset=utf-8")
+
+    async def file_raw(self, request: Request) -> Response:
+        """A text attachment as plain text, so an agent (or a person) can read the code as it is."""
+        record = self.visible_attachment(request, request.path_params["id"])
+        if record is None or not self.attachments.path(record["id"]).is_file():
+            return self.attachment_unavailable(request)
+        if not record["is_text"]:
+            return self.not_found(request, "This file is not text. Download it instead.")
+        return FileResponse(self.attachments.path(record["id"]), media_type="text/plain; charset=utf-8",
+                            headers={"Content-Disposition": "inline", "Content-Security-Policy": "default-src 'none'; sandbox"})
+
+    # --- login / logout ----------------------------------------------------
+
+    @staticmethod
+    def client_key(request: Request) -> str:
+        return request.client.host if request.client else "unknown"
+
+    async def login_form(self, request: Request) -> Response:
+        next_url = safe_next(request.query_params.get("next"))
+        if self.session(request):
+            return RedirectResponse(next_url, status_code=303)
+        return HTMLResponse(pages.login_page(self.ctx(request), next_url=next_url))
+
+    async def login(self, request: Request) -> Response:
+        form = await request.form()
+        next_url = safe_next(_field(form, "next"))
+        key = self.client_key(request)
+        wait = self.throttle.retry_after(key)
+        if wait:
+            minutes = ceil(wait / 60)
+            message = f"Too many failed attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}."
+            page = pages.login_page(self.ctx(request), message, next_url, _field(form, "username"))
+            return HTMLResponse(page, status_code=429, headers={"Retry-After": str(wait)})
+        if not self.auth.check_login(_field(form, "username"), _field(form, "password")):
+            self.throttle.record_failure(key)
+            await asyncio.sleep(self.login_delay)
+            wrong = pages.login_page(self.ctx(request), "Wrong username or password.", next_url, _field(form, "username"))
+            return HTMLResponse(wrong, 401)
+        self.throttle.reset(key)
+        cookie, session = self.auth.new_session()
+        self.store.create_login_session(session["sid"], session["exp"])
+        response = RedirectResponse(next_url, status_code=303)
+        response.set_cookie(SESSION_COOKIE, cookie, max_age=SESSION_SECONDS, httponly=True, samesite="lax",
+                            secure=request.url.scheme == "https", path="/")
+        return response
+
+    async def logout(self, request: Request) -> Response:
+        session = self.session(request)
+        form = await request.form()
+        if session is not None and not Auth.check_csrf(session, _field(form, "csrf")):
+            return self.csrf_failed(request)
+        if session is not None:
+            self.store.revoke_login_session(session["sid"])
+        response = RedirectResponse("/login", status_code=303)
+        response.delete_cookie(SESSION_COOKIE, path="/")
+        return response
+
+    # --- admin -------------------------------------------------------------
+
+    async def dashboard(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        status = request.query_params.get("status", "all")
+        if status not in ("all", "draft", "published"):
+            status = "all"
+        page = _page_number(request)
+        listing = self.store.list_posts(status=status, limit=ADMIN_PAGE_SIZE, offset=(page - 1) * ADMIN_PAGE_SIZE)
+        notice = NOTICES.get(request.query_params.get("msg", ""), "")
+        dashboard = pages.dashboard_page(self.ctx(request), listing, self.store.stats(), status, page, ADMIN_PAGE_SIZE, notice)
+        return HTMLResponse(dashboard)
+
+    @staticmethod
+    def _form_values(form) -> dict:
+        return {name: _field(form, name).replace("\r\n", "\n") for name in ("title", "slug", "tags", "summary", "body")}
+
+    @staticmethod
+    def _tag_list(text: str) -> list[str]:
+        return [part for part in text.split(",") if part.strip()]
+
+    async def new_form(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        return HTMLResponse(pages.editor_page(self.ctx(request), None, {}))
+
+    async def create(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        form = await request.form(max_part_size=4 * MAX_BODY_CHARS + 1024)
+        if not Auth.check_csrf(session, _field(form, "csrf")):
+            return self.csrf_failed(request)
+        values = self._form_values(form)
+        publish = _field(form, "action") == "publish"
+        try:
+            post = self.store.create_post(values["title"], values["body"], tags=self._tag_list(values["tags"]),
+                                          slug=values["slug"], summary=values["summary"], publish=publish)
+        except BlogError as exc:
+            status = 409 if isinstance(exc, Conflict) else 400
+            return HTMLResponse(pages.editor_page(self.ctx(request), None, values, error=str(exc)), status)
+        notice = "published" if publish else "created"
+        return RedirectResponse(f"/admin/edit/{quote(post['slug'], safe='')}?msg={notice}", status_code=303)
+
+    async def edit_form(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        return self.edit_page(request, request.path_params["slug"], notice=NOTICES.get(request.query_params.get("msg", ""), ""))
+
+    def edit_page(self, request: Request, slug: str, notice: str = "", error: str = "", status: int = 200) -> Response:
+        """The editor for an existing post, filled in from what is saved."""
+        try:
+            post = self.store.get_post(slug)
+        except NotFound:
+            return self.not_found(request, "There is no post with that address.")
+        values = {"title": post["title"], "slug": post["slug"], "tags": ", ".join(post["tags"]),
+                  "summary": post["custom_summary"], "body": post["body"]}
+        return HTMLResponse(pages.editor_page(self.ctx(request), post, values, error=error, notice=notice), status_code=status)
+
+    async def edit(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        slug = request.path_params["slug"]
+        form = await request.form(max_part_size=4 * MAX_BODY_CHARS + 1024)
+        if not Auth.check_csrf(session, _field(form, "csrf")):
+            return self.csrf_failed(request)
+        values = self._form_values(form)
+        action = _field(form, "action")
+        try:
+            expected = int(_field(form, "version"))
+        except ValueError:
+            expected = None
+        try:
+            post = self.store.update_post(
+                slug, title=values["title"], body=values["body"], summary=values["summary"],
+                tags=self._tag_list(values["tags"]), new_slug=values["slug"] if values["slug"] and values["slug"] != slug else None,
+                expected_version=expected)
+            if action == "publish" and post["status"] != "published":
+                post = self.store.set_status(post["slug"], "published")
+            elif action == "unpublish" and post["status"] != "draft":
+                post = self.store.set_status(post["slug"], "draft")
+        except NotFound:
+            return self.not_found(request, "There is no post with that address.")
+        except BlogError as exc:
+            try:
+                current = self.store.get_post(slug)
+            except NotFound:
+                return self.not_found(request, "There is no post with that address.")
+            error = str(exc)
+            if isinstance(exc, Conflict) and "since you loaded" in error:
+                error += ". Your text is kept below. Saving again replaces the other version with yours."
+            status = 409 if isinstance(exc, Conflict) else 400
+            return HTMLResponse(pages.editor_page(self.ctx(request), current, values, error=error), status)
+        notice = {"publish": "published", "unpublish": "unpublished"}.get(action, "saved")
+        return RedirectResponse(f"/admin/edit/{quote(post['slug'], safe='')}?msg={notice}", status_code=303)
+
+    async def _post_action(self, request: Request, action: str) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        form = await request.form()
+        if not Auth.check_csrf(session, _field(form, "csrf")):
+            return self.csrf_failed(request)
+        slug = request.path_params["slug"]
+        try:
+            if action == "delete":
+                if not self.delete_post(slug):
+                    raise NotFound(slug)
+                notice = "deleted"
+            else:
+                self.store.set_status(slug, "published" if action == "publish" else "draft")
+                notice = "published" if action == "publish" else "unpublished"
+        except NotFound:
+            return self.not_found(request, "There is no post with that address.")
+        return RedirectResponse(f"/admin?msg={notice}", status_code=303)
+
+    async def delete(self, request: Request) -> Response:
+        return await self._post_action(request, "delete")
+
+    async def publish(self, request: Request) -> Response:
+        return await self._post_action(request, "publish")
+
+    async def unpublish(self, request: Request) -> Response:
+        return await self._post_action(request, "unpublish")
+
+    async def preview(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        if not Auth.check_csrf(session, request.headers.get("x-csrf-token")):
+            return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+        text = (await request.body()).decode("utf-8", errors="replace")
+        if len(text) > MAX_BODY_CHARS:
+            return JSONResponse({"error": "Post is too long"}, status_code=413)
+        return HTMLResponse(render_markdown(text))
+
+    async def upload(self, request: Request) -> Response:
+        session = self.admin_session(request)
+        if isinstance(session, Response):
+            return session
+        if not Auth.check_csrf(session, request.headers.get("x-csrf-token")):
+            return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+        return await self._save_upload(request)
+
+    async def _save_upload(self, request: Request) -> JSONResponse:
+        try:
+            form = await request.form(max_files=1, max_fields=4)
+            upload = form.get("file")
+            if isinstance(upload, str) or upload is None:
+                raise BlogError("Send the image in a form field named 'file'")
+            name = media.save_image(self.media_dir, await upload.read())
+        except BlogError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse({"url": f"/media/{name}", "absolute_url": f"{self.public_base(request)}/media/{name}"}, status_code=201)
+
+
+def _api_error(message: str, status: int, headers: dict | None = None) -> JSONResponse:
+    return JSONResponse({"error": message}, status_code=status, headers=headers)
+
+
+def _api(handler):
+    """Wrap an API handler: require the bearer token and turn store errors into JSON errors."""
+
+    async def wrapper(self, request: Request) -> Response:
+        if not self.auth.check_api_token(request.headers.get("authorization")):
+            return _api_error("Missing or invalid API token", 401, {"WWW-Authenticate": 'Bearer realm="blog"'})
+        try:
+            return await handler(self, request)
+        except NotFound as exc:
+            return _api_error(str(exc), 404)
+        except Conflict as exc:
+            return _api_error(str(exc), 409)
+        except TooLarge as exc:
+            return _api_error(str(exc), 413)
+        except BlogError as exc:
+            return _api_error(str(exc), 400)
+
+    wrapper.__name__ = handler.__name__
+    return wrapper
+
+
+def _body(request_json) -> dict:
+    if not isinstance(request_json, dict):
+        raise BlogError("The request body must be a JSON object")
+    return request_json
+
+
+def _text(data: dict, key: str, default=None):
+    value = data.get(key, default)
+    if value is not None and not isinstance(value, str):
+        raise BlogError(f"{key} must be a string")
+    return value
+
+
+def _bool(data: dict, key: str, default: bool = False) -> bool:
+    value = data.get(key, default)
+    if not isinstance(value, bool):
+        raise BlogError(f"{key} must be true or false")
+    return value
+
+
+def _tags(data: dict):
+    value = data.get("tags")
+    if value is not None and (not isinstance(value, list) or not all(isinstance(tag, str) for tag in value)):
+        raise BlogError("tags must be a list of strings")
+    return value
+
+
+def _int(request: Request, name: str, default: int) -> int:
+    raw = request.query_params.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise BlogError(f"{name} must be an integer") from None
+
+
+async def _json(request: Request) -> dict:
+    try:
+        data = await request.json()
+    except ValueError:
+        raise BlogError("The request body must be valid JSON") from None
+    return _body(data)
+
+
+class _Api:
+    """The JSON API under /api/v1, used by tools such as the MCP server. Every call needs the API token."""
+
+    def __init__(self, blog: BlogApp):
+        self.blog = blog
+        self.store = blog.store
+        self.auth = blog.auth
+
+    def with_url(self, request: Request, post: dict) -> dict:
+        post["url"] = f"{self.blog.public_base(request)}/post/{quote(post['slug'], safe='')}"
+        if "attachments" in post:  # only full posts carry the list; summaries carry attachment_count
+            post["attachments"] = [self.with_attachment_url(request, a) for a in post["attachments"]]
+        return post
+
+    def with_attachment_url(self, request: Request, attachment: dict) -> dict:
+        base = f"{self.blog.public_base(request)}/files/{attachment['id']}"
+        attachment["url"] = base
+        if attachment.get("is_text"):
+            attachment["view_url"] = f"{base}/view"
+        return attachment
+
+    @_api
+    async def info(self, request: Request) -> Response:
+        s = self.blog.settings
+        base = self.blog.public_base(request)
+        info = {"title": s.title, "description": s.description, "public": s.public, "url": base, "posts": self.store.stats()}
+        if s.public:  # these only work when anyone can read the blog
+            info["agent_urls"] = {
+                "llms_txt": f"{base}/llms.txt", "llms_full_txt": f"{base}/llms-full.txt", "atom_feed": f"{base}/feed.xml",
+                "json_feed": f"{base}/feed.json", "sitemap": f"{base}/sitemap.xml", "post_markdown": f"{base}/post/<slug>.md",
+            }
+        return JSONResponse(info)
+
+    @_api
+    async def list_posts(self, request: Request) -> Response:
+        result = self.store.list_posts(status=request.query_params.get("status", "all"), tag=request.query_params.get("tag", ""),
+                                       limit=_int(request, "limit", 20), offset=_int(request, "offset", 0))
+        result["posts"] = [self.with_url(request, p) for p in result["posts"]]
+        return JSONResponse(result)
+
+    @_api
+    async def create_post(self, request: Request) -> Response:
+        data = await _json(request)
+        post = self.store.create_post(_text(data, "title", ""), _text(data, "body", ""), tags=_tags(data), slug=_text(data, "slug", ""),
+                                      summary=_text(data, "summary", ""), publish=_bool(data, "publish"))
+        return JSONResponse(self.with_url(request, post), status_code=201)
+
+    @_api
+    async def get_post(self, request: Request) -> Response:
+        return JSONResponse(self.with_url(request, self.store.get_post(request.path_params["slug"])))
+
+    @_api
+    async def update_post(self, request: Request) -> Response:
+        data = await _json(request)
+        expected = data.get("expected_version")
+        if expected is not None and (not isinstance(expected, int) or isinstance(expected, bool)):
+            raise BlogError("expected_version must be an integer")
+        post = self.store.update_post(request.path_params["slug"], title=_text(data, "title"), body=_text(data, "body"),
+                                      summary=_text(data, "summary"), tags=_tags(data), new_slug=_text(data, "slug"),
+                                      expected_version=expected)
+        return JSONResponse(self.with_url(request, post))
+
+    @_api
+    async def replace_in_post(self, request: Request) -> Response:
+        data = await _json(request)
+        post = self.store.replace_in_post(request.path_params["slug"], _text(data, "find", ""), _text(data, "replace", ""),
+                                          replace_all=_bool(data, "replace_all"))
+        return JSONResponse(self.with_url(request, post))
+
+    @_api
+    async def publish(self, request: Request) -> Response:
+        return JSONResponse(self.with_url(request, self.store.set_status(request.path_params["slug"], "published")))
+
+    @_api
+    async def unpublish(self, request: Request) -> Response:
+        return JSONResponse(self.with_url(request, self.store.set_status(request.path_params["slug"], "draft")))
+
+    @_api
+    async def delete_post(self, request: Request) -> Response:
+        slug = request.path_params["slug"]
+        if not self.blog.delete_post(slug):
+            raise NotFound(f"Post '{slug}' not found")
+        return JSONResponse({"slug": slug, "deleted": True})
+
+    @_api
+    async def search(self, request: Request) -> Response:
+        result = self.store.search_posts(request.query_params.get("q", ""), status=request.query_params.get("status", "all"),
+                                         limit=_int(request, "limit", 20))
+        result["posts"] = [self.with_url(request, p) for p in result["posts"]]
+        return JSONResponse(result)
+
+    @_api
+    async def tags(self, request: Request) -> Response:
+        return JSONResponse(self.store.list_tags(status=request.query_params.get("status", "all")))
+
+    @_api
+    async def upload_media(self, request: Request) -> Response:
+        return await self.blog._save_upload(request)
+
+    @_api
+    async def list_attachments(self, request: Request) -> Response:
+        files = [self.with_attachment_url(request, a) for a in self.store.list_attachments(request.path_params["slug"])]
+        return JSONResponse({"attachments": files, "count": len(files)})
+
+    @_api
+    async def add_attachment(self, request: Request) -> Response:
+        form = await request.form(max_files=1, max_fields=4)
+        upload = form.get("file")
+        if upload is None or isinstance(upload, str):
+            raise BlogError("Send the file in a form field named 'file'")
+        record = await self.blog.attach(request.path_params["slug"], upload)
+        return JSONResponse(self.with_attachment_url(request, record), status_code=200 if record["replaced"] else 201)
+
+    @_api
+    async def get_attachment(self, request: Request) -> Response:
+        """The attachment's details and, for a text file, its content (so an assistant can read it)."""
+        record = self.store.get_attachment(request.path_params["id"])
+        limit = max(1, min(_int(request, "max_bytes", 256 * 1024), MAX_PREVIEW_API_BYTES))
+        content, truncated = self.blog.attachments.read_text(record["id"], limit) if record["is_text"] else (None, False)
+        return JSONResponse({**self.with_attachment_url(request, record), "content": content, "truncated": truncated})
+
+    @_api
+    async def download_attachment(self, request: Request) -> Response:
+        record = self.store.get_attachment(request.path_params["id"])
+        response = self.blog.download_response(record)
+        if response is None:
+            raise NotFound("Attachment not found")
+        return response
+
+    @_api
+    async def remove_attachment(self, request: Request) -> Response:
+        slug, attachment_id = request.path_params["slug"], request.path_params["id"]
+        self.store.list_attachments(slug)  # a clear 'post not found' for an unknown post
+        if not self.blog.remove_attachment(slug, attachment_id):
+            raise NotFound("That file is not attached to this post")
+        return JSONResponse({"slug": slug, "id": attachment_id, "deleted": True})
+
+
+def request_limit_for(settings: Settings):
+    """How large a request body each path accepts: file uploads get room for a file, everything else stays small."""
+    attachment_limit = settings.max_attachment_bytes + 1024 * 1024  # one file plus form overhead
+
+    def limit(path: str) -> int:
+        if path.startswith("/admin/attach/") or (path.startswith("/api/v1/posts/") and path.endswith("/attachments")):
+            return attachment_limit
+        if path in ("/admin/upload", "/api/v1/media"):
+            return IMAGE_REQUEST_BYTES
+        return FORM_REQUEST_BYTES
+
+    return limit
+
+
+def create_app(settings: Settings) -> Starlette:
+    """Build the blog as an ASGI application."""
+    blog = BlogApp(settings)
+    api = _Api(blog)
+
+    async def http_error(request: Request, exc: HTTPException) -> Response:
+        if request.url.path.startswith("/api/"):
+            return _api_error(exc.detail if exc.status_code != 404 else "Not found", exc.status_code)
+        message = {404: "That page does not exist.", 405: "That is not allowed here.", 413: "That upload is too large."}.get(
+            exc.status_code, "Something went wrong.")
+        title = "Not found" if exc.status_code == 404 else "Error"
+        return HTMLResponse(pages.message_page(blog.ctx(request), title, message), status_code=exc.status_code)
+
+    async def server_error(request: Request, exc: Exception) -> Response:
+        if request.url.path.startswith("/api/"):
+            return _api_error("Internal error", 500)
+        return HTMLResponse(pages.message_page(blog.ctx(request), "Error", "Something went wrong."), status_code=500)
+
+    routes = [
+        Route("/", blog.home),
+        Route("/post/{slug}", blog.post),
+        Route("/tag/{tag}", blog.tag),
+        Route("/tags", blog.tags),
+        Route("/search", blog.search),
+        Route("/media/{name}", blog.media_file),
+        Route("/files/{id}", blog.file_download),
+        Route("/files/{id}/view", blog.file_view),
+        Route("/files/{id}/raw", blog.file_raw),
+        Route("/llms.txt", blog.llms_txt),
+        Route("/llms-full.txt", blog.llms_full),
+        Route("/sitemap.xml", blog.sitemap),
+        Route("/feed.xml", blog.atom_feed),
+        Route("/feed.json", blog.json_feed),
+        Route("/healthz", blog.healthz),
+        Route("/robots.txt", blog.robots),
+        Route("/login", blog.login_form, methods=["GET"]),
+        Route("/login", blog.login, methods=["POST"]),
+        Route("/logout", blog.logout, methods=["POST"]),
+        Route("/admin", blog.dashboard),
+        Route("/admin/new", blog.new_form, methods=["GET"]),
+        Route("/admin/new", blog.create, methods=["POST"]),
+        Route("/admin/edit/{slug}", blog.edit_form, methods=["GET"]),
+        Route("/admin/edit/{slug}", blog.edit, methods=["POST"]),
+        Route("/admin/delete/{slug}", blog.delete, methods=["POST"]),
+        Route("/admin/publish/{slug}", blog.publish, methods=["POST"]),
+        Route("/admin/unpublish/{slug}", blog.unpublish, methods=["POST"]),
+        Route("/admin/preview", blog.preview, methods=["POST"]),
+        Route("/admin/upload", blog.upload, methods=["POST"]),
+        Route("/admin/attach/{slug}", blog.admin_attach, methods=["POST"]),
+        Route("/admin/detach/{slug}/{id}", blog.admin_detach, methods=["POST"]),
+        Route("/api/v1/info", api.info, methods=["GET"]),
+        Route("/api/v1/posts", api.list_posts, methods=["GET"]),
+        Route("/api/v1/posts", api.create_post, methods=["POST"]),
+        Route("/api/v1/posts/{slug}", api.get_post, methods=["GET"]),
+        Route("/api/v1/posts/{slug}", api.update_post, methods=["PATCH"]),
+        Route("/api/v1/posts/{slug}", api.delete_post, methods=["DELETE"]),
+        Route("/api/v1/posts/{slug}/replace", api.replace_in_post, methods=["POST"]),
+        Route("/api/v1/posts/{slug}/publish", api.publish, methods=["POST"]),
+        Route("/api/v1/posts/{slug}/unpublish", api.unpublish, methods=["POST"]),
+        Route("/api/v1/search", api.search, methods=["GET"]),
+        Route("/api/v1/tags", api.tags, methods=["GET"]),
+        Route("/api/v1/media", api.upload_media, methods=["POST"]),
+        Route("/api/v1/posts/{slug}/attachments", api.list_attachments, methods=["GET"]),
+        Route("/api/v1/posts/{slug}/attachments", api.add_attachment, methods=["POST"]),
+        Route("/api/v1/posts/{slug}/attachments/{id}", api.remove_attachment, methods=["DELETE"]),
+        Route("/api/v1/attachments/{id}", api.get_attachment, methods=["GET"]),
+        Route("/api/v1/attachments/{id}/download", api.download_attachment, methods=["GET"]),
+        Mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static"),
+    ]
+    app = Starlette(
+        routes=routes,
+        middleware=[
+            Middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts),
+            Middleware(SecurityHeaders, indexable=settings.public),
+            Middleware(BodyLimit, limit_for=request_limit_for(settings)),
+        ],
+        exception_handlers={HTTPException: http_error, Exception: server_error},
+    )
+    app.state.blog = blog
+    return app
+
+
+__all__ = ["BlogApp", "MissingPassword", "create_app", "safe_next"]

@@ -1,0 +1,62 @@
+[project]
+name = "blog-mcp"
+version = "0.1.0"
+description = "FastMCP server for managing a blog through its JSON API."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=4.0.4",
+    "requests>=2.34.2",
+    "python-dotenv>=1.2.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["blog_client*"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests (use real local sockets)",
+    "slow: Slow running tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["blog_client"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+    "black>=26.5.1",
+    "isort>=9.0.1",
+    "flake8>=7.3.0",
+    "mypy>=2.3.1",
+]
+test = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+]

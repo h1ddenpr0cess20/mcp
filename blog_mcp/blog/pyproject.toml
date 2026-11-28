@@ -1,0 +1,69 @@
+[project]
+name = "blog"
+version = "0.1.0"
+description = "A private blog with an in-browser editor, a JSON API, and password login."
+requires-python = ">=3.11"
+dependencies = [
+    "starlette>=1.10.0",
+    "uvicorn>=0.54.0",
+    "h11>=0.16.0",
+    "anyio>=4.14.2,<5",
+    "python-multipart>=0.0.34",
+    "markdown-it-py>=4.3.0",
+    "python-dotenv>=1.2.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["blog_app*"]
+
+[tool.setuptools.package-data]
+blog_app = ["static/*"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests (run a real server on a local port)",
+    "slow: Slow running tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["blog_app"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+    "black>=26.5.1",
+    "isort>=9.0.1",
+    "flake8>=7.3.0",
+    "mypy>=2.3.1",
+]
+test = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+]
