@@ -86,8 +86,8 @@ def set_password(settings: Settings, generate: bool = False, ask=getpass.getpass
     passwords.write_hash(path, passwords.hash_password(password))
     (Path(settings.data_dir).expanduser() / passwords.LEGACY_PLAINTEXT_FILE).unlink(missing_ok=True)
     if generate:
-        out.write(f"[blog] Your new password is: {password}\n")
-        out.write("[blog] Write it down now: only a hash is stored, so it cannot be shown again.\n")
+        out.write("[blog] A new password was generated and stored as a hash.\n")
+        out.write("[blog] For security, the generated password is not printed.\n")
     out.write(f"[blog] Password saved (as a hash) in {path}. Restart the blog to use it; everyone is then signed out.\n")
     if settings.password or settings.password_hash:
         out.write("[blog] Note: BLOG_PASSWORD or BLOG_PASSWORD_HASH is set and takes priority. Remove it to use the new password.\n")
