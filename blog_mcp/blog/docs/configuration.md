@@ -127,7 +127,7 @@ To set or change the password:
 
 ```bash
 python blog_mcp/blog/blog.py set-password              # prompts twice (at least 8 characters)
-python blog_mcp/blog/blog.py set-password --generate   # generates a strong one and shows it once
+python blog_mcp/blog/blog.py set-password --generate   # generates a strong one and shows it once (terminal only; add --even-if-redirected to override)
 ```
 
 Restart the blog afterwards. Everyone who was logged in is signed out, because sessions are tied to the password.

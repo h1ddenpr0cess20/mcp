@@ -1,7 +1,7 @@
 """Run the blog, or manage its password.
 
     python blog.py                  start the blog
-    python blog.py set-password     choose a new login password (or --generate one)
+    python blog.py set-password     choose a new login password (or --generate one, in a terminal)
     python blog.py hash-password    print a hash to use as BLOG_PASSWORD_HASH
 
 This is the program that hosts the blog. It needs nothing else running; the MCP
@@ -138,10 +138,18 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command")
     change = commands.add_parser("set-password", help="choose a new login password")
     change.add_argument("--generate", action="store_true", help="generate a random password and show it once")
+    change.add_argument("--even-if-redirected", action="store_true",
+                        help="print a generated password even when output is not a terminal (it may end up in a log)")
     commands.add_parser("hash-password", help="print a password hash for BLOG_PASSWORD_HASH")
     args = parser.parse_args(argv)
     settings = Settings.from_env()
     if args.command == "set-password":
+        if args.generate and not args.even_if_redirected and not sys.stderr.isatty():
+            sys.stderr.write(
+                "[blog] Refusing to generate a password: output is not a terminal, so it could end up in a log or CI output.\n"
+                "[blog] Run this in a terminal, choose one without --generate, or add --even-if-redirected.\n"
+            )
+            return 2
         return set_password(settings, generate=args.generate)
     if args.command == "hash-password":
         return hash_password_command()

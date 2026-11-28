@@ -179,9 +179,17 @@ class TestTheRealProgram:
         return subprocess.run([sys.executable, str(BLOG_PY), *args], capture_output=True, text=True, env=env, timeout=60, **kwargs)
 
     @pytest.mark.integration
-    def test_set_password_then_log_in_with_it_and_find_no_plaintext_anywhere(self, tmp_path):
+    def test_generate_refuses_to_print_when_output_is_not_a_terminal(self, tmp_path):
         data = tmp_path / "data"
         result = self.run("set-password", "--generate", env_extra={"BLOG_DIR": str(data)})
+        assert result.returncode == 2
+        assert "not a terminal" in result.stderr and "new password is:" not in result.stderr
+        assert not (data / "password_hash").exists()
+
+    @pytest.mark.integration
+    def test_set_password_then_log_in_with_it_and_find_no_plaintext_anywhere(self, tmp_path):
+        data = tmp_path / "data"
+        result = self.run("set-password", "--generate", "--even-if-redirected", env_extra={"BLOG_DIR": str(data)})
         assert result.returncode == 0
         password = [line.split(": ", 1)[1] for line in result.stderr.splitlines() if "new password is:" in line][0]
         assert password.encode() not in on_disk(data) and password not in result.stdout
