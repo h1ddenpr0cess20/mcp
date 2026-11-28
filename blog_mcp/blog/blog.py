@@ -27,10 +27,7 @@ _SET_COMMAND = "python blog_mcp/blog/blog.py set-password"
 
 
 def startup_lines(settings: Settings, blog, generated: str | None = None) -> list[str]:
-    """What to tell the person starting the blog: where it is and exactly how to log in.
-
-    `generated` is a password created by this very start. It is printed here and nowhere else, once.
-    """
+    """What to tell the person starting the blog: where it is and how to log in."""
     scheme = "https" if settings.tls_cert else "http"
     host = "127.0.0.1" if settings.host in ("0.0.0.0", "") else settings.host
     mode = "public: published posts are readable by anyone" if settings.public else "private: everything needs a login"
@@ -39,12 +36,12 @@ def startup_lines(settings: Settings, blog, generated: str | None = None) -> lis
         lines += [
             "[blog] Log in with:",
             f"[blog]     username: {settings.username}",
-            f"[blog]     password: {generated}",
-            f"[blog] Write it down now: only a hash is stored (in {blog.password_source}), so it cannot be shown again.",
+            "[blog]     password: [redacted]",
+            "[blog] A password was generated and stored as a hash. If needed, set a new one with the command below.",
             f"[blog] To choose a different password later, run: {_SET_COMMAND}",
         ]
     elif blog.password_source.startswith("BLOG_PASSWORD"):
-        lines.append(f"[blog] Log in as '{settings.username}' with the password from {blog.password_source}.")
+        lines.append(f"[blog] Log in as '{settings.username}' with the configured password.")
     else:
         lines.append(f"[blog] Log in as '{settings.username}'. Forgotten the password? Set a new one with: {_SET_COMMAND}")
     if blog.removed_plaintext_password:
@@ -54,7 +51,7 @@ def startup_lines(settings: Settings, blog, generated: str | None = None) -> lis
     if settings.api_token:
         lines.append("[blog] The MCP server uses the API token set in BLOG_API_TOKEN")
     else:
-        lines.append(f"[blog] The MCP server uses the API token in the file {blog.api_token_source}")
+        lines.append("[blog] The MCP server uses the configured API token.")
     if settings.host not in _LOOPBACK and not settings.tls_cert:
         lines.append(
             f"[blog] WARNING: listening on {settings.host} without TLS, so logins cross the network in clear text. "
