@@ -73,19 +73,16 @@ cp blog_mcp/blog/.env.example blog_mcp/blog/.env
 python blog_mcp/blog/blog.py
 ```
 
-The first time it starts from a terminal, it generates a password, prints your login once, and stores only a hash of the password:
+The first time it starts from a terminal, it asks you to choose a password and stores only a hash of it:
 
 ```
 [blog] 'Private Blog' is running at http://127.0.0.1:9901  (private: everything needs a login)
-[blog] Log in with:
-[blog]     username: owner
-[blog]     password: <your generated password>
-[blog] Write it down now: only a hash is stored (in /home/you/mcp-blog/password_hash), so it cannot be shown again.
+[blog] Log in as 'owner' with the password you just chose (only a hash of it is stored).
 [blog] To choose a different password later, run: python blog_mcp/blog/blog.py set-password
-[blog] The MCP server uses the API token in the file /home/you/mcp-blog/api_token
+[blog] The MCP server uses the configured API token.
 ```
 
-On later starts it does not show the password; it tells you how to set a new one. The password is only ever shown to an interactive terminal, never written into a log or a service's output. If there is no password yet and the blog is not started from a terminal (for example as a service), it refuses to start and tells you to run `python blog_mcp/blog/blog.py set-password` first.
+On later starts it does not show the password; it tells you how to set a new one. The password is never printed or written into a log. If there is no password yet and the blog is not started from a terminal (for example as a service), it refuses to start and tells you to run `python blog_mcp/blog/blog.py set-password` first.
 
 Stop it with `Ctrl+C`. If the port is already in use it stops with an error instead of starting twice; change `BLOG_PORT`.
 
@@ -126,8 +123,7 @@ Limits: titles up to 200 characters, summaries up to 500, bodies up to 1,000,000
 To set or change the password:
 
 ```bash
-python blog_mcp/blog/blog.py set-password              # prompts twice (at least 8 characters)
-python blog_mcp/blog/blog.py set-password --generate   # generates a strong one and shows it once (terminal only; add --even-if-redirected to override)
+python blog_mcp/blog/blog.py set-password   # prompts twice (at least 8 characters)
 ```
 
 Restart the blog afterwards. Everyone who was logged in is signed out, because sessions are tied to the password.
@@ -210,7 +206,7 @@ The app rejects requests whose `Host` header is not in `BLOG_ALLOWED_HOSTS`; lis
 
 The blog trusts `X-Forwarded-Proto` and `X-Forwarded-For` only from `127.0.0.1` (uvicorn's default; change it with the `FORWARDED_ALLOW_IPS` environment variable). That is what makes the session cookie `Secure` over HTTPS and makes login lockouts apply to each visitor rather than to the proxy.
 
-If the blog is exposed to the internet, use a long password (the generated one is) and keep `BLOG_PUBLIC=false` unless you want strangers reading it. It is built for one person's blog, not for heavy traffic.
+If the blog is exposed to the internet, use a long password and keep `BLOG_PUBLIC=false` unless you want strangers reading it. It is built for one person's blog, not for heavy traffic.
 
 ---
 

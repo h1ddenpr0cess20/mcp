@@ -1,7 +1,7 @@
 """Run the blog, or manage its password.
 
     python blog.py                  start the blog
-    python blog.py set-password     choose a new login password (or --generate one, in a terminal)
+    python blog.py set-password     choose a new login password
     python blog.py hash-password    print a hash to use as BLOG_PASSWORD_HASH
 
 This is the program that hosts the blog. It needs nothing else running; the MCP
@@ -26,18 +26,15 @@ _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 _SET_COMMAND = "python blog_mcp/blog/blog.py set-password"
 
 
-def startup_lines(settings: Settings, blog, generated: str | None = None) -> list[str]:
+def startup_lines(settings: Settings, blog, chose_password: bool = False) -> list[str]:
     """What to tell the person starting the blog: where it is and how to log in."""
     scheme = "https" if settings.tls_cert else "http"
     host = "127.0.0.1" if settings.host in ("0.0.0.0", "") else settings.host
     mode = "public: published posts are readable by anyone" if settings.public else "private: everything needs a login"
     lines = [f"[blog] '{settings.title}' is running at {scheme}://{host}:{settings.port}  ({mode})"]
-    if generated:
+    if chose_password:
         lines += [
-            "[blog] Log in with:",
-            f"[blog]     username: {settings.username}",
-            "[blog]     password: [redacted]",
-            "[blog] A password was generated and stored as a hash. If needed, set a new one with the command below.",
+            f"[blog] Log in as '{settings.username}' with the password you just chose (only a hash of it is stored).",
             f"[blog] To choose a different password later, run: {_SET_COMMAND}",
         ]
     elif blog.password_source.startswith("BLOG_PASSWORD"):
@@ -72,19 +69,16 @@ def _ask_new_password(ask, out) -> str | None:
     return first
 
 
-def set_password(settings: Settings, generate: bool = False, ask=getpass.getpass, out=None) -> int:
+def set_password(settings: Settings, ask=getpass.getpass, out=None) -> int:
     """Store a new password (as a hash). Returns a process exit code."""
     out = out or sys.stderr
-    password = passwords.generate_password() if generate else _ask_new_password(ask, out)
+    password = _ask_new_password(ask, out)
     if password is None:
         return 1
     BlogStore(settings.data_dir)  # makes the data folder (owner-only) if this is a brand new blog
     path = passwords.password_file(settings.data_dir)
     passwords.write_hash(path, passwords.hash_password(password))
     (Path(settings.data_dir).expanduser() / passwords.LEGACY_PLAINTEXT_FILE).unlink(missing_ok=True)
-    if generate:
-        out.write("[blog] A new password was generated and stored as a hash.\n")
-        out.write("[blog] For security, the generated password is not printed.\n")
     out.write(f"[blog] Password saved (as a hash) in {path}. Restart the blog to use it; everyone is then signed out.\n")
     if settings.password or settings.password_hash:
         out.write("[blog] Note: BLOG_PASSWORD or BLOG_PASSWORD_HASH is set and takes priority. Remove it to use the new password.\n")
@@ -102,21 +96,26 @@ def hash_password_command(ask=getpass.getpass, out=None, stdout=None) -> int:
     return 0
 
 
-def run(settings: Settings, interactive: bool, out=None) -> int:
-    """Start the blog. On the very first start, from a terminal, make a password and show it once."""
+def run(settings: Settings, interactive: bool, out=None, ask=getpass.getpass) -> int:
+    """Start the blog. On the very first start, from a terminal, ask the person to choose a password."""
     out = out or sys.stderr
-    generated = None
+    chose_password = False
     try:
         app = create_app(settings)
     except MissingPassword:
         if not interactive:
-            out.write("[blog] No login password is set up yet, and this is not an interactive terminal, so none can be shown to you.\n")
+            out.write("[blog] No login password is set up yet, and this is not an interactive terminal, so none can be asked for.\n")
             out.write(f"[blog] Run this once in a terminal, then start the blog again: {_SET_COMMAND}\n")
             return 2
-        generated = passwords.generate_password()
-        passwords.write_hash(passwords.password_file(settings.data_dir), passwords.hash_password(generated))
+        out.write("[blog] No login password is set up yet. Choose one now.\n")
+        password = _ask_new_password(ask, out)
+        if password is None:
+            return 1
+        BlogStore(settings.data_dir)  # makes the data folder (owner-only) if this is a brand new blog
+        passwords.write_hash(passwords.password_file(settings.data_dir), passwords.hash_password(password))
+        chose_password = True
         app = create_app(settings)
-    out.write("\n".join(startup_lines(settings, app.state.blog, generated)) + "\n")
+    out.write("\n".join(startup_lines(settings, app.state.blog, chose_password)) + "\n")
     out.flush()
     uvicorn.run(
         app,
@@ -133,21 +132,12 @@ def run(settings: Settings, interactive: bool, out=None) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the blog, or manage its password.")
     commands = parser.add_subparsers(dest="command")
-    change = commands.add_parser("set-password", help="choose a new login password")
-    change.add_argument("--generate", action="store_true", help="generate a random password and show it once")
-    change.add_argument("--even-if-redirected", action="store_true",
-                        help="print a generated password even when output is not a terminal (it may end up in a log)")
+    commands.add_parser("set-password", help="choose a new login password")
     commands.add_parser("hash-password", help="print a password hash for BLOG_PASSWORD_HASH")
     args = parser.parse_args(argv)
     settings = Settings.from_env()
     if args.command == "set-password":
-        if args.generate and not args.even_if_redirected and not sys.stderr.isatty():
-            sys.stderr.write(
-                "[blog] Refusing to generate a password: output is not a terminal, so it could end up in a log or CI output.\n"
-                "[blog] Run this in a terminal, choose one without --generate, or add --even-if-redirected.\n"
-            )
-            return 2
-        return set_password(settings, generate=args.generate)
+        return set_password(settings)
     if args.command == "hash-password":
         return hash_password_command()
     return run(settings, interactive=sys.stderr.isatty())

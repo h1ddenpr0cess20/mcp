@@ -10,11 +10,10 @@ pip install -r blog_mcp/blog/requirements.txt
 python blog_mcp/blog/blog.py
 ```
 
-Open `http://127.0.0.1:9901` and log in as `owner`. The first time the blog starts it generates a password and **prints it in the terminal, once**. Write it down: the blog stores only a salted hash of it, never the password itself, so it cannot be shown again. If you lose it, or want your own, set a new one:
+Open `http://127.0.0.1:9901` and log in as `owner`. The first time the blog starts from a terminal it asks you to choose a password. The blog stores only a salted hash of it, never the password itself, so it cannot be shown again. To change it later:
 
 ```bash
-python blog_mcp/blog/blog.py set-password              # type a new password
-python blog_mcp/blog/blog.py set-password --generate   # or have one generated and shown once
+python blog_mcp/blog/blog.py set-password   # type a new password
 ```
 
 Then restart the blog.

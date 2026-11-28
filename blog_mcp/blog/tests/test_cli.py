@@ -58,15 +58,6 @@ class TestSetPassword:
         assert entry.set_password(settings, ask=typed("12345678", "12345678"), out=io.StringIO()) == 0
 
     @pytest.mark.unit
-    def test_generate_shows_the_password_once_and_stores_only_a_hash(self, settings):
-        out = io.StringIO()
-        assert entry.set_password(settings, generate=True, out=out) == 0
-        shown = [line.split(": ", 1)[1] for line in out.getvalue().splitlines() if "new password is:" in line][0]
-        assert verify_password(shown, read_hash(password_file(settings.data_dir)))
-        assert shown.encode() not in on_disk(settings.data_dir)
-        assert out.getvalue().count(shown) == 1
-
-    @pytest.mark.unit
     def test_changing_an_existing_password_replaces_it(self, settings):
         entry.set_password(settings, ask=typed("first password", "first password"), out=io.StringIO())
         entry.set_password(settings, ask=typed("second password", "second password"), out=io.StringIO())
@@ -77,19 +68,19 @@ class TestSetPassword:
     def test_it_removes_an_old_plaintext_file(self, settings):
         settings.data_dir.mkdir(parents=True)
         (settings.data_dir / "blog_password").write_text("old plaintext")
-        entry.set_password(settings, generate=True, out=io.StringIO())
+        entry.set_password(settings, ask=typed("long enough", "long enough"), out=io.StringIO())
         assert not (settings.data_dir / "blog_password").exists() and b"old plaintext" not in on_disk(settings.data_dir)
 
     @pytest.mark.unit
     def test_it_warns_when_a_configured_password_would_override_it(self, tmp_path):
         out = io.StringIO()
-        entry.set_password(Settings(data_dir=tmp_path / "d", password="from env"), generate=True, out=out)
+        entry.set_password(Settings(data_dir=tmp_path / "d", password="from env"), ask=typed("long enough", "long enough"), out=out)
         assert "takes priority" in out.getvalue()
 
     @pytest.mark.unit
     @pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
     def test_a_brand_new_blog_gets_an_owner_only_folder(self, settings):
-        entry.set_password(settings, generate=True, out=io.StringIO())
+        entry.set_password(settings, ask=typed("long enough", "long enough"), out=io.StringIO())
         assert oct(settings.data_dir.stat().st_mode & 0o777) == "0o700"
         assert oct(password_file(settings.data_dir).stat().st_mode & 0o777) == "0o600"
 
@@ -120,22 +111,25 @@ class TestStartingTheBlog:
         self.launched = launched
 
     @pytest.mark.unit
-    def test_a_first_start_from_a_terminal_makes_a_password_and_shows_it_once(self, settings):
+    def test_a_first_start_from_a_terminal_asks_for_a_password_and_stores_only_a_hash(self, settings):
         out = io.StringIO()
-        assert entry.run(settings, interactive=True, out=out) == 0
-        shown = [line.split("password: ", 1)[1] for line in out.getvalue().splitlines() if line.startswith("[blog]     password: ")][0]
-        assert out.getvalue().count(shown) == 1 and len(shown) >= 24
-        assert verify_password(shown, read_hash(password_file(settings.data_dir)))
-        assert shown.encode() not in on_disk(settings.data_dir)
-        assert "only a hash is stored" in out.getvalue() and entry._SET_COMMAND in out.getvalue()
+        assert entry.run(settings, interactive=True, out=out, ask=typed("my chosen password", "my chosen password")) == 0
+        assert verify_password("my chosen password", read_hash(password_file(settings.data_dir)))
+        assert b"my chosen password" not in on_disk(settings.data_dir) and "my chosen password" not in out.getvalue()
+        assert "password you just chose" in out.getvalue() and entry._SET_COMMAND in out.getvalue()
         assert len(self.launched) == 1
 
     @pytest.mark.unit
+    def test_a_first_start_with_an_unusable_password_does_not_start(self, settings):
+        assert entry.run(settings, interactive=True, out=io.StringIO(), ask=typed("short")) == 1
+        assert read_hash(password_file(settings.data_dir)) is None and self.launched == []
+
+    @pytest.mark.unit
     def test_the_next_start_shows_no_password(self, settings):
-        entry.run(settings, interactive=True, out=io.StringIO())
+        entry.run(settings, interactive=True, out=io.StringIO(), ask=typed("long enough", "long enough"))
         shown = io.StringIO()
         assert entry.run(settings, interactive=True, out=shown) == 0
-        assert "password:" not in shown.getvalue().replace("the password from", "")
+        assert "just chose" not in shown.getvalue()
         assert "Forgotten the password?" in shown.getvalue() and entry._SET_COMMAND in shown.getvalue()
 
     @pytest.mark.unit
@@ -143,13 +137,13 @@ class TestStartingTheBlog:
         out = io.StringIO()
         assert entry.run(settings, interactive=False, out=out) == 2
         assert "set-password" in out.getvalue() and self.launched == []
-        assert read_hash(password_file(settings.data_dir)) is None  # nothing was generated that nobody could see
+        assert read_hash(password_file(settings.data_dir)) is None  # nothing was made up behind the person's back
 
     @pytest.mark.unit
     def test_a_configured_password_is_named_never_shown(self, tmp_path):
         out = io.StringIO()
         entry.run(Settings(data_dir=tmp_path / "d", password="from the environment"), interactive=True, out=out)
-        assert "from the environment" not in out.getvalue() and "BLOG_PASSWORD" in out.getvalue()
+        assert "from the environment" not in out.getvalue() and "configured password" in out.getvalue()
         assert read_hash(password_file(tmp_path / "d")) is None
 
     @pytest.mark.unit
@@ -178,20 +172,19 @@ class TestTheRealProgram:
         env.pop("BLOG_PASSWORD_HASH", None)
         return subprocess.run([sys.executable, str(BLOG_PY), *args], capture_output=True, text=True, env=env, timeout=60, **kwargs)
 
-    @pytest.mark.integration
-    def test_generate_refuses_to_print_when_output_is_not_a_terminal(self, tmp_path):
-        data = tmp_path / "data"
-        result = self.run("set-password", "--generate", env_extra={"BLOG_DIR": str(data)})
-        assert result.returncode == 2
-        assert "not a terminal" in result.stderr and "new password is:" not in result.stderr
-        assert not (data / "password_hash").exists()
+    @classmethod
+    def run_with_typed_password(cls, password, env_extra):
+        driver = ("import sys; sys.path.insert(0, %r); import blog; from blog_app import Settings; "
+                  "sys.exit(blog.set_password(Settings.from_env(), ask=lambda prompt: %r))") % (str(BLOG_PY.parent), password)
+        return subprocess.run([sys.executable, "-c", driver], capture_output=True, text=True,
+                              env={**os.environ, **env_extra}, timeout=60)
 
     @pytest.mark.integration
     def test_set_password_then_log_in_with_it_and_find_no_plaintext_anywhere(self, tmp_path):
         data = tmp_path / "data"
-        result = self.run("set-password", "--generate", "--even-if-redirected", env_extra={"BLOG_DIR": str(data)})
+        password = "a typed password"
+        result = self.run_with_typed_password(password, env_extra={"BLOG_DIR": str(data)})
         assert result.returncode == 0
-        password = [line.split(": ", 1)[1] for line in result.stderr.splitlines() if "new password is:" in line][0]
         assert password.encode() not in on_disk(data) and password not in result.stdout
 
         with socket.socket() as probe:
